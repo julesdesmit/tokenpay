@@ -3214,26 +3214,22 @@ bool EnsureWalletIsAvailable(CWallet * const pwallet, bool avoidException)
 {
     if (pwallet) return true;
     if (avoidException) return false;
-    if (!HasWallets()) {
-        throw JSONRPCError(
-                RPC_METHOD_NOT_FOUND, "Method not found (wallet method is disabled because no wallet is loaded)");
-    }
-    throw JSONRPCError(RPC_WALLET_NOT_SPECIFIED,
+    throw JSONRPCError(RPC_WALLET_ERROR,
                        "Wallet file not specified (must request wallet RPC through /wallet/<filename> uri-path).");
 }
 
-Value walletsettings(const JSONRPCRequest &request, bool fHelp)
+Value walletsettings(const Array &request, bool fHelp)
 {
     // std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
     // CHDWallet *const pwallet = GetParticlWallet(wallet.get());
     if (!EnsureWalletIsAvailable(pwalletMain, fHelp))
-        return error("Wallet unavailable");
+        throw JSONRPCError(RPC_WALLET_ERROR, "Wallet unavailable");
 
-    if (fHelp || request.params.size() < 1 || request.params.size() > 2)
+    if (fHelp || request.size() < 1 || request.size() > 2)
         throw std::runtime_error(
                 "walletsettings \"setting\" {...}\n"
                 "\nManage wallet settings.\n"
-                + HelpRequiringPassphrase(pwalletMain) +
+                + HelpRequiringPassphrase() +
                 "\nArguments:\n"
                 "1. \"setting\"                    (string, required) Settings group to modify.\n"
                 "2. \"value\"                      (json, optional) Settings.\n"
@@ -3251,9 +3247,9 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
                 "Pass an empty json object to clear the settings group.\n"
                 "\nExamples\n"
                 "Set coldstaking changeaddress extended public key:\n"
-                + HelpExampleCli("walletsettings", "changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"") + "\n"
+                "walletsettings", "changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"\n"
                                                                                                                          "Clear changeaddress settings\n"
-                + HelpExampleCli("walletsettings", "changeaddress \"{}\"") + "\n"
+                "walletsettings", "changeaddress \"{}\"\n"
         );
 
     // Make sure the results are valid at least up to the most recent block
@@ -3264,14 +3260,14 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
 
     Object result;
 
-    std::string sSetting = request.params[0].get_str();
+    std::string sSetting = request[0].get_str();
 
     if (sSetting == "changeaddress")
     {
-        Value json;
+        Object json;
         Array warnings;
 
-        if (request.params.size() == 1)
+        if (request.size() == 1)
         {
             if (!pwalletMain->GetSetting("changeaddress", json))
             {
@@ -3285,11 +3281,11 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
 
 
 
-        if (request.params[1].type() == obj_type)
+        if (request[1].type() == obj_type)
         {
-            json = request.params[1].get_obj();
+            json = request[1].get_obj();
 
-            const std::vector<std::string> &vKeys = json.get_name();
+            const std::vector<std::string> &vKeys = json.name_.get_str();
             if (vKeys.size() < 1)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
@@ -3302,20 +3298,20 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
             {
                 if (sKey == "address_standard")
                 {
-                    if (!json["address_standard"].type() == str_type)
+                    if (json.value_.type() != str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("address_standard must be a string."));
 
-                    std::string sAddress = json["address_standard"].get_str();
+                    std::string sAddress = json.value_.get_str();
                     CBitcoinAddress addr(sAddress);
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
                 } else
                 if (sKey == "coldstakingaddress")
                 {
-                    if (!json["coldstakingaddress"].type() == str_type)
+                    if (json_value.type() != str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress must be a string."));
 
-                    std::string sAddress = json["coldstakingaddress"].get_str();
+                    std::string sAddress = json.value_.get_str();
                     CBitcoinAddress addr(sAddress);
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
@@ -3325,8 +3321,8 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
                     // TODO: override option?
                     // if (pwalletMain->HaveAddress(addr.Get()))
                     //     throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
-                    if (pwalletMain->idDefaultAccount.IsNull())
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
+                    // if (pwalletMain->idDefaultAccount())
+                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
 
                     // This will need to be refactored appropriately for the codebase if this requires a hardfork.
                     //
@@ -3353,10 +3349,10 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
     } else
     if (sSetting == "stakingoptions")
     {
-        Value json;
+        Object json;
         Array warnings;
 
-        if (request.params.size() == 1)
+        if (request.size() == 1)
         {
             if (!pwalletMain->GetSetting("stakingoptions", json))
                 result.push_back(Pair(sSetting, "default"));
@@ -3365,11 +3361,11 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
             return result;
         };
 
-        if (request.params[1].type() == obj_type)
+        if (request[1].type() == obj_type)
         {
             json = request.params[1].get_obj();
 
-            const std::vector<std::string> &vKeys = json.get_name();
+            const std::vector<std::string> &vKeys = json.name_.get_str();
             if (vKeys.size() < 1)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
@@ -3387,22 +3383,22 @@ Value walletsettings(const JSONRPCRequest &request, bool fHelp)
                 } else
                 if (sKey == "stakecombinethreshold")
                 {
-                    int64_t test = AmountFromValue(json["stakecombinethreshold"]);
+                    int64_t test = AmountFromValue(json.value_);
                     if (test < 0)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
                 } else
                 if (sKey == "stakesplitthreshold")
                 {
-                    int64_t test = AmountFromValue(json["stakesplitthreshold"]);
+                    int64_t test = AmountFromValue(json.value_);
                     if (test < 0)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
                 } else
                 if (sKey == "rewardaddress")
                 {
-                    if (!json["rewardaddress"].type() == str_type)
+                    if (json.value_.type() == str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("rewardaddress must be a string."));
 
-                    CBitcoinAddress addr(json["rewardaddress"].get_str());
+                    CBitcoinAddress addr(json.value_.get_str());
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
                 } else

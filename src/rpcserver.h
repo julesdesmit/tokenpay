@@ -8,6 +8,7 @@
 
 #include "uint256.h"
 #include "rpcprotocol.h"
+#include "wallet.h"
 
 #include <list>
 #include <map>
@@ -110,7 +111,7 @@ extern double GetPoSKernelPS();
 extern std::string HexBits(unsigned int nBits);
 extern std::string HelpRequiringPassphrase();
 extern void EnsureWalletIsUnlocked();
-bool EnsureWalletIsAvailable(CWallet *, bool avoidException);
+extern bool EnsureWalletIsAvailable(CWallet *, bool avoidException);
 
 //
 // Utilities: convert hex-encoded Values

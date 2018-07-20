@@ -5882,7 +5882,7 @@ bool CWallet::SetSetting(const std::string& setting, const Value& json)
     return true;
 }
 
-bool CWallet::SetSetting(const std::string& setting)
+bool CWallet::EraseSetting(const std::string& setting)
 {
     LOCK(cs_wallet);
 
@@ -6066,6 +6066,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     };
 
                     scriptPubKeyOut = scriptPubKeyKernel;
+                    spendId = CKeyID(Hash160(vSolutions[0]), key);
                 };
 
                 if (fConditionalStake)

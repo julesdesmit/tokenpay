@@ -204,6 +204,10 @@ public:
 
     void GetKeyBirthTimes(std::map<CKeyID, int64_t> &mapKeyBirth) const;
 
+    bool CWallet::GetSetting(const std::string& setting, Value& json);
+    bool CWallet::SetSetting(const std::string& setting, const Value& json);
+    bool CWallet::EraseSetting(const std::string& setting);
+
 
     /** Increment the next transaction order id
         @return next transaction order id
