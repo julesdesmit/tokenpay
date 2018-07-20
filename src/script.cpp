@@ -241,7 +241,7 @@ const char* GetOpName(opcodetype opcode)
     case OP_NOP6                   : return "OP_NOP6";
     case OP_NOP7                   : return "OP_NOP7";
     case OP_NOP8                   : return "OP_NOP8";
-    case OP_NOP9                   : return "OP_NOP9";
+    case OP_ISCOINSTAKE            : return "OP_ISCOINSTAKE";
     case OP_ANON_MARKER            : return "OP_ANON_MARKER";
 
     case OP_INVALIDOPCODE          : return "OP_INVALIDOPCODE";
@@ -2055,6 +2055,28 @@ bool CScript::IsPayToScriptHash() const
             this->at(22) == OP_EQUAL);
 }
 
+bool CScript::IsPayToPublicKeyHash() const
+{
+    // Extra-fast test for pay-to-pubkey-hash CScripts:
+    return (this->size() == 25 &&
+            (*this)[0] == OP_DUP &&
+            (*this)[1] == OP_HASH160 &&
+            (*this)[2] == 0x14 &&
+            (*this)[23] == OP_EQUALVERIFY &&
+            (*this)[24] == OP_CHECKSIG);
+}
+
+bool CScript::MatchPayToPublicKeyHash(size_t ofs) const
+{
+// Extra-fast test for pay-to-script-hash CScripts:
+    return (this->size() - ofs >= 25 &&
+            (*this)[ofs + 0] == OP_DUP &&
+            (*this)[ofs + 1] == OP_HASH160 &&
+            (*this)[ofs + 2] == 0x14 &&
+            (*this)[ofs + 23] == OP_EQUALVERIFY &&
+            (*this)[ofs + 24] == OP_CHECKSIG);
+}
+
 bool CScript::HasCanonicalPushes() const
 {
     const_iterator pc = begin();
@@ -2118,6 +2140,14 @@ public:
         return false;
     }
 };
+
+CScript GetScriptForDestination(const CTxDestination& dest)
+{
+    CScript script;
+
+    boost::apply_visitor(CScriptVisitor(&script), dest);
+    return script;
+}
 
 void CScript::SetDestination(const CTxDestination& dest)
 {
@@ -2265,3 +2295,83 @@ CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys)
     script << CScript::EncodeOP_N(keys.size()) << OP_CHECKMULTISIG;
     return script;
 }
+
+bool HasIsCoinstakeOp(const CScript &script)
+{
+    CScript::const_iterator pc = script.begin();
+
+    if (pc == script.end())
+        return false;
+
+    opcodetype opcode;
+    valtype vchPushValue;
+
+    if (!script.GetOp(pc, opcode, vchPushValue))
+        return false;
+
+    if (opcode == OP_ISCOINSTAKE)
+        return true;
+
+    return false;
+};
+
+bool IsSpendScriptP2PKH(const CScript &script)
+{
+    CScript::const_iterator pc = script.begin();
+    CScript::const_iterator pend = script.end();
+
+    opcodetype opcode;
+    valtype vchPushValue;
+
+    bool fFoundOp = false;
+    while (pc < pend)
+    {
+        if (!script.GetOp(pc, opcode, vchPushValue))
+            break;
+
+        if (!fFoundOp
+            && opcode == OP_ELSE)
+        {
+            size_t ofs = pc - script.begin();
+            return script.MatchPayToPublicKeyHash(ofs);
+        };
+    };
+
+    return false;
+};
+
+bool GetCoinstakeScriptPath(const CScript &scriptIn, CScript &scriptOut)
+{
+    CScript::const_iterator pc = scriptIn.begin();
+    CScript::const_iterator pend = scriptIn.end();
+    CScript::const_iterator pcStart = pc;
+
+    opcodetype opcode;
+    valtype vchPushValue;
+
+    bool fFoundOp = false;
+    while (pc < pend)
+    {
+        if (!scriptIn.GetOp(pc, opcode, vchPushValue))
+            break;
+
+        if (!fFoundOp
+            && opcode == OP_ISCOINSTAKE)
+        {
+            pc++; // skip over if
+
+            pcStart = pc;
+            fFoundOp = true;
+            continue;
+        };
+
+        if (fFoundOp && opcode == OP_ELSE)
+        {
+            pc--;
+            scriptOut = CScript(pcStart, pc);
+            return true;
+        };
+    };
+
+    return false;
+};

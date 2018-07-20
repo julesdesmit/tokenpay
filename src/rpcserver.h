@@ -110,6 +110,7 @@ extern double GetPoSKernelPS();
 extern std::string HexBits(unsigned int nBits);
 extern std::string HelpRequiringPassphrase();
 extern void EnsureWalletIsUnlocked();
+bool EnsureWalletIsAvailable(CWallet *, bool avoidException);
 
 //
 // Utilities: convert hex-encoded Values
@@ -244,5 +245,7 @@ extern json_spirit::Value thinforcestate(const json_spirit::Array& params, bool 
 
 extern json_spirit::Value extkey(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value mnemonic(const json_spirit::Array& params, bool fHelp);
+
+extern json_spirit::Value walletsettings(const json_spirit::Array& params, bool fHelp);
 
 #endif

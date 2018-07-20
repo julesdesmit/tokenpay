@@ -3210,4 +3210,231 @@ Value txnreport(const Array& params, bool fHelp)
     return result;
 }
 
+bool EnsureWalletIsAvailable(CWallet * const pwallet, bool avoidException)
+{
+    if (pwallet) return true;
+    if (avoidException) return false;
+    if (!HasWallets()) {
+        throw JSONRPCError(
+                RPC_METHOD_NOT_FOUND, "Method not found (wallet method is disabled because no wallet is loaded)");
+    }
+    throw JSONRPCError(RPC_WALLET_NOT_SPECIFIED,
+                       "Wallet file not specified (must request wallet RPC through /wallet/<filename> uri-path).");
+}
 
+Value walletsettings(const JSONRPCRequest &request, bool fHelp)
+{
+    // std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
+    // CHDWallet *const pwallet = GetParticlWallet(wallet.get());
+    if (!EnsureWalletIsAvailable(pwalletMain, fHelp))
+        return error("Wallet unavailable");
+
+    if (fHelp || request.params.size() < 1 || request.params.size() > 2)
+        throw std::runtime_error(
+                "walletsettings \"setting\" {...}\n"
+                "\nManage wallet settings.\n"
+                + HelpRequiringPassphrase(pwalletMain) +
+                "\nArguments:\n"
+                "1. \"setting\"                    (string, required) Settings group to modify.\n"
+                "2. \"value\"                      (json, optional) Settings.\n"
+                "\"changeaddress\" {\n"
+                "  \"address_standard\"          (string, optional, default=none) Change address for standard inputs.\n"
+                "  \"coldstakingaddress\"        (string, optional, default=none) Cold staking address for standard inputs.\n"
+                "}\n"
+                "\"stakingoptions\" {\n"
+                "  \"enabled\"                   (bool, optional, default=true) Toggle staking enabled on this wallet.\n"
+                "  \"stakecombinethreshold\"     (amount, optional, default=1000) Join outputs below this value.\n"
+                "  \"stakesplitthreshold\"       (amount, optional, default=2000) Split outputs above this value.\n"
+                "  \"rewardaddress\"             (string, optional, default=none) An address which the user portion of the block reward gets sent to.\n"
+                "}\n"
+                "Omit the json object to print the settings group.\n"
+                "Pass an empty json object to clear the settings group.\n"
+                "\nExamples\n"
+                "Set coldstaking changeaddress extended public key:\n"
+                + HelpExampleCli("walletsettings", "changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"") + "\n"
+                                                                                                                         "Clear changeaddress settings\n"
+                + HelpExampleCli("walletsettings", "changeaddress \"{}\"") + "\n"
+        );
+
+    // Make sure the results are valid at least up to the most recent block
+    // the user could have gotten from another RPC command prior to now
+    // pwalletMain->BlockUntilSyncedToCurrentChain();
+
+    EnsureWalletIsUnlocked();
+
+    Object result;
+
+    std::string sSetting = request.params[0].get_str();
+
+    if (sSetting == "changeaddress")
+    {
+        Value json;
+        Array warnings;
+
+        if (request.params.size() == 1)
+        {
+            if (!pwalletMain->GetSetting("changeaddress", json))
+            {
+                result.push_back(Pair(sSetting, "default"));
+            } else
+            {
+                result.push_back(Pair(sSetting, json));
+            };
+            return result;
+        };
+
+
+
+        if (request.params[1].type() == obj_type)
+        {
+            json = request.params[1].get_obj();
+
+            const std::vector<std::string> &vKeys = json.get_name();
+            if (vKeys.size() < 1)
+            {
+                if (!pwalletMain->EraseSetting(sSetting))
+                    throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
+                result.push_back(Pair(sSetting, "cleared"));
+                return result;
+            };
+
+            for (const auto &sKey : vKeys)
+            {
+                if (sKey == "address_standard")
+                {
+                    if (!json["address_standard"].type() == str_type)
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("address_standard must be a string."));
+
+                    std::string sAddress = json["address_standard"].get_str();
+                    CBitcoinAddress addr(sAddress);
+                    if (!addr.IsValid())
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
+                } else
+                if (sKey == "coldstakingaddress")
+                {
+                    if (!json["coldstakingaddress"].type() == str_type)
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress must be a string."));
+
+                    std::string sAddress = json["coldstakingaddress"].get_str();
+                    CBitcoinAddress addr(sAddress);
+                    if (!addr.IsValid())
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
+                    if (IsStealthAddress(sAddress))
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
+
+                    // TODO: override option?
+                    // if (pwalletMain->HaveAddress(addr.Get()))
+                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
+                    if (pwalletMain->idDefaultAccount.IsNull())
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
+
+                    // This will need to be refactored appropriately for the codebase if this requires a hardfork.
+                    //
+                    // const Consensus::Params& consensusParams = Params().GetConsensus();
+                    // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
+                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
+                } else
+                {
+                    warnings.push_back("Unknown key " + sKey);
+                };
+            };
+
+            json.push_back(Pair("time", GetTime()));
+            if (!pwalletMain->SetSetting(sSetting, json))
+                throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
+
+            if (warnings.size() > 0)
+                result.push_back(Pair("warnings", warnings));
+        } else
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, _("Must be json object."));
+        };
+        result.push_back(Pair(sSetting, json));
+    } else
+    if (sSetting == "stakingoptions")
+    {
+        Value json;
+        Array warnings;
+
+        if (request.params.size() == 1)
+        {
+            if (!pwalletMain->GetSetting("stakingoptions", json))
+                result.push_back(Pair(sSetting, "default"));
+            else
+                result.push_back(Pair(sSetting, json));
+            return result;
+        };
+
+        if (request.params[1].type() == obj_type)
+        {
+            json = request.params[1].get_obj();
+
+            const std::vector<std::string> &vKeys = json.get_name();
+            if (vKeys.size() < 1)
+            {
+                if (!pwalletMain->EraseSetting(sSetting))
+                    throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
+                result.push_back(Pair(sSetting, "cleared"));
+                return result;
+            };
+
+            Value jsonOld;
+            bool fHaveOldSetting = pwalletMain->GetSetting(sSetting, jsonOld);
+            for (const auto &sKey : vKeys)
+            {
+                if (sKey == "enabled")
+                {
+                } else
+                if (sKey == "stakecombinethreshold")
+                {
+                    int64_t test = AmountFromValue(json["stakecombinethreshold"]);
+                    if (test < 0)
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
+                } else
+                if (sKey == "stakesplitthreshold")
+                {
+                    int64_t test = AmountFromValue(json["stakesplitthreshold"]);
+                    if (test < 0)
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
+                } else
+                if (sKey == "rewardaddress")
+                {
+                    if (!json["rewardaddress"].type() == str_type)
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("rewardaddress must be a string."));
+
+                    CBitcoinAddress addr(json["rewardaddress"].get_str());
+                    if (!addr.IsValid())
+                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
+                } else
+                {
+                    warnings.push_back("Unknown key " + sKey);
+                };
+            };
+
+            json.push_back(Pair("time", GetTime()));
+            if (!pwalletMain->SetSetting(sSetting, json))
+                throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
+
+            std::string sError;
+            pwalletMain->ProcessStakingSettings(sError);
+            if (!sError.empty())
+            {
+                result.push_back(Pair("error", sError));
+                if (fHaveOldSetting)
+                    pwalletMain->SetSetting(sSetting, jsonOld);
+            };
+
+            if (warnings.size() > 0)
+                result.push_back(Pair("warnings", warnings));
+        } else
+        {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, _("Must be json object."));
+        };
+        result.push_back(Pair(sSetting, json));
+    } else
+    {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Unknown setting"));
+    };
+
+    return result;
+};

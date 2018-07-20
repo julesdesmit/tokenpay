@@ -18,6 +18,12 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 
+#include "json/json_spirit_reader_template.h"
+#include "json/json_spirit_utils.h"
+#include "json/json_spirit_writer_template.h"
+
+using namespace json_spirit;
+
 using namespace std;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -200,6 +206,74 @@ bool CWallet::LoadCScript(const CScript& redeemScript)
 
     return CCryptoKeyStore::AddCScript(redeemScript);
 }
+
+bool CWallet::ProcessStakingSettings(std::string &sError)
+{
+
+    // Set defaults
+    fStakingEnabled = true;
+    nStakeCombineThreshold = 1000 * COIN;
+    nStakeSplitThreshold = 2000 * COIN;
+    nMaxStakeCombine = 3;
+
+    Value json;
+    if (GetSetting("stakingoptions", json))
+    {
+        if (!json["enabled"].type() == null_type)
+        {
+            try { fStakingEnabled = json["enabled"].get_bool();
+            } catch (std::exception &e) {
+                sError = "Setting \"enabled\" failed.";
+            };
+        };
+
+        if (!json["stakecombinethreshold"].type() == null_type)
+        {
+            try { nStakeCombineThreshold = AmountFromValue(json["stakecombinethreshold"]);
+            } catch (std::exception &e) {
+                sError = "\"stakecombinethreshold\" not amount.";
+            };
+        };
+
+        if (!json["stakesplitthreshold"].type() == null_type)
+        {
+            try { nStakeSplitThreshold = AmountFromValue(json["stakesplitthreshold"]);
+            } catch (std::exception &e) {
+                sError = "\"stakesplitthreshold\" not amount.";
+            };
+        };
+
+        if (!json["foundationdonationpercent"].type() == null_type)
+        {
+            try { nWalletDevFundCedePercent = json["foundationdonationpercent"].get_int();
+            } catch (std::exception &e) {
+                sError = "\"foundationdonationpercent\" not integer.";
+            };
+        };
+
+        if (json["rewardaddress"].type() == str_type)
+        {
+            try { rewardAddress = CBitcoinAddress(json["rewardaddress"].get_str());
+            } catch (std::exception &e) {
+                sError = "Setting \"rewardaddress\" failed.";
+            };
+        };
+    };
+
+    if (nStakeCombineThreshold < 100 * COIN || nStakeCombineThreshold > 5000 * COIN)
+    {
+        sError = "\"stakecombinethreshold\" must be >= 100 and <= 5000.";
+        nStakeCombineThreshold = 1000 * COIN;
+    };
+
+    if (nStakeSplitThreshold < nStakeCombineThreshold * 2 || nStakeSplitThreshold > 10000 * COIN)
+    {
+        sError = "\"stakesplitthreshold\" must be >= 2x \"stakecombinethreshold\" and <= 10000.";
+        nStakeSplitThreshold = nStakeCombineThreshold * 2;
+    };
+
+    return true;
+};
 
 bool CWallet::Lock()
 {
@@ -5777,6 +5851,100 @@ uint64_t CWallet::GetStakeWeight() const
     return nWeight;
 }
 
+bool CWallet::GetSetting(const std::string& setting, Value& json)
+{
+    LOCK(cs_wallet);
+
+    CWalletDB wdb(*database, "r");
+
+    std::string sJson;
+
+    if(!wdb.ReadWalletSetting(setting, sJson))
+        return false;
+
+    if(!json.read(sJson))
+        return false;
+
+    return true;
+}
+
+bool CWallet::SetSetting(const std::string& setting, const Value& json)
+{
+    LOCK(cs_wallet);
+
+    CWalletDB wdb(*database, "r+");
+
+    std::string sJson = json.write();
+
+    if(!wdb.WriteWalletSetting(setting, sJson))
+        return false;
+
+    return true;
+}
+
+bool CWallet::SetSetting(const std::string& setting)
+{
+    LOCK(cs_wallet);
+
+    CWalletDB wdb(*database, "r+");
+
+    if(!wdb.EraseWalletSetting(setting))
+        return false;
+
+    return true;
+}
+
+bool CWallet::GetScriptForAddress(CScript &script, const CBitcoinAddress &addr, bool fUpdate, std::vector<uint8_t> *vData)
+{
+    LOCK(cs_wallet);
+
+    CTxDestination dest = addr.Get();
+    if (dest.type() == typeid(CStealthAddress))
+    {
+        if (!vData)
+            return error("%s: StealthAddress, vData is null .", __func__);
+
+        CStealthAddress sx = boost::get<CStealthAddress>(dest);
+        std::vector<CTempRecipient> vecSend;
+        std::string strError;
+        CTempRecipient r;
+        r.nType = OUTPUT_STANDARD;
+        r.address = sx;
+        vecSend.push_back(r);
+
+        if (0 != ExpandTempRecipients(vecSend, NULL, strError) || vecSend.size() != 2)
+            return error("%s: ExpandTempRecipients failed, %s.", __func__, strError);
+
+        script = vecSend[0].scriptPubKey;
+        *vData = vecSend[1].vData;
+    } else
+    if (dest.type() == typeid(CExtKeyPair))
+    {
+        CExtKeyPair ek = boost::get<CExtKeyPair>(dest);
+        uint32_t nChildKey;
+
+        CPubKey pkTemp;
+        if (0 != ExtKeyGetDestination(ek, pkTemp, nChildKey))
+            return error("%s: ExtKeyGetDestination failed.", __func__);
+
+        nChildKey++;
+        if (fUpdate)
+            ExtKeyUpdateLooseKey(ek, nChildKey, false);
+
+        script = GetScriptForDestination(pkTemp.GetID());
+    } else
+    if (dest.type() == typeid(CKeyID))
+    {
+        CKeyID idk = boost::get<CKeyID>(dest);
+        script = GetScriptForDestination(idk);
+    } else
+    {
+        return error("%s: Unknown destination type.", __func__);
+    };
+
+    return true;
+};
+
 bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64_t nFees, CTransaction& txNew, CKey& key)
 {
     CBlockIndex* pindexPrev = pindexBest;
@@ -5835,7 +6003,18 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                 std::vector<valtype> vSolutions;
                 txnouttype whichType;
                 CScript scriptPubKeyOut;
-                scriptPubKeyKernel = pcoin.first->vout[pcoin.second].scriptPubKey;
+                CTxOut *kernelOut = pcoin.first->vout[pcoin.second].get();
+                const CScript *pscriptPubKey = &kernelOut.scriptPubKey;
+
+                CScript coinstakePath;
+                bool fConditionalStake = false;
+                if (HasIsCoinstakeOp(*pscriptPubKey))
+                {
+                    fConditionalStake = true;
+                    if(!GetCoinstakeScriptPath(*pscriptPubKey, coinstakePath))
+                        continue;
+                    pscriptPubKey = &coinstakePath;
+                }
 
                 if (!Solver(scriptPubKeyKernel, whichType, vSolutions))
                 {
@@ -5846,6 +6025,8 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
 
                 if (fDebugPoS)
                     LogPrintf("CreateCoinStake : parsed kernel type=%d\n", whichType);
+
+                CKeyID spendId;
 
                 if (whichType != TX_PUBKEY && whichType != TX_PUBKEYHASH)
                 {
@@ -5864,6 +6045,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                         break;  // unable to find corresponding public key
                     };
                     scriptPubKeyOut << key.GetPubKey() << OP_CHECKSIG;
+                    spendId = CKeyID(uint160(vSolutions[0]), key);
                 };
 
                 if (whichType == TX_PUBKEY)
@@ -5885,6 +6067,54 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
 
                     scriptPubKeyOut = scriptPubKeyKernel;
                 };
+
+                if (fConditionalStake)
+                {
+                    scriptPubKeyKernel = kernelOut->scriptPubKey;
+                } else
+                {
+                    scriptPubKeyKernel << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
+
+                    // If a coldstaking address is loaded, then send the output to a coldstaking script
+                    Value jsonSettings;
+                    if ((GetSetting("changeaddress"), jsonSettings)
+                        && jsonSettings["coldstakingaddress"].type() == str_type)
+                    {
+                        std::string sAddress;
+                        try {
+                            sAddress = jsonSettings["coldstakingaddress"].get_str();
+                        } catch (std::exception &e) {
+                            return error("%s: Get coldstaking address failed %s.", __func__, e.what());
+                        };
+
+                        if (fDebugPoS)
+                            LogPrintf("Sending output to coldstakingscript %s.", sAddress);
+
+                        CBitcoinAddress addrColdStaking(sAddress);
+                        CScript scriptStaking;
+                        if (!GetScriptForAddress(scriptStaking, addrColdStaking, true))
+                            return error("%s: GetScriptForAddress failed.", __func__);
+
+                        // Get new key from the active internal chain
+                        CPubKey pkSpend;
+                        if (0 != GetChangeAddress(pkSpend))
+                            return error("%s: GetChangeAddress failed.", __func__);
+                        CKeyID pkSpendId = pkSpend.GetID();
+                        scriptPubKeyKernel = GetScriptForDestination(pkSpendId);
+
+                        if (scriptStaking.IsPayToPublicKeyHash())
+                        {
+                            CScript script = CScript() << OP_ISCOINSTAKE << OP_IF;
+                            script += scriptStaking;
+                            script << OP_ELSE;
+                            script += scriptPubKeyKernel;
+                            script << OP_ENDIF;
+
+                            scriptPubKeyKernel = script;
+                            scriptPubKeyOut = script;
+                        }
+                    }
+                }
 
                 txNew.nTime -= n;
                 txNew.vin.push_back(CTxIn(pcoin.first->GetHash(), pcoin.second));

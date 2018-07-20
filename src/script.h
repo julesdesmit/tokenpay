@@ -261,7 +261,7 @@ enum opcodetype
     OP_NOP6 = 0xb5,
     OP_NOP7 = 0xb6,
     OP_NOP8 = 0xb7,
-    OP_NOP9 = 0xb8,
+    OP_ISCOINSTAKE = 0xb8, // OP_NOP9
     OP_ANON_MARKER = 0xb9, // OP_NOP10
 
 
@@ -598,6 +598,8 @@ public:
     unsigned int GetSigOpCount(const CScript& scriptSig) const;
 
     bool IsPayToScriptHash() const;
+    bool IsPayToPublicKeyHash() const;
+    bool MatchPayToPublicKeyHash(size_t ofs) const;
 
     // Called by IsStandardTx and P2SH VerifyScript (which makes it consensus-critical).
     bool IsPushOnly() const
@@ -746,6 +748,10 @@ bool VerifySignature(const CTransaction& txFrom, const CTransaction& txTo, unsig
 // Given two sets of signatures for scriptPubKey, possibly with OP_0 placeholders,
 // combine them intelligently and return the result.
 CScript CombineSignatures(CScript scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
+
+bool HasIsCoinstakeOp(const CScript &script);
+bool IsSpendScriptP2PKH(const CScript &script);
+CScript GetScriptForDestination(const CTxDestination& dest);
 
 CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys);
 
