@@ -219,41 +219,34 @@ bool CWallet::ProcessStakingSettings(std::string &sError)
     Value json;
     if (GetSetting("stakingoptions", json))
     {
-        if (!json["enabled"].type() == null_type)
+
+        if (json.find("enabled")->second.type() != null_type)
         {
-            try { fStakingEnabled = json["enabled"].get_bool();
+            try { fStakingEnabled = json.find("enabled")->second.get_bool();
             } catch (std::exception &e) {
                 sError = "Setting \"enabled\" failed.";
             };
         };
 
-        if (!json["stakecombinethreshold"].type() == null_type)
+        if (json.find("stakecombinethreshold")->second.type() != null_type)
         {
-            try { nStakeCombineThreshold = AmountFromValue(json["stakecombinethreshold"]);
+            try { nStakeCombineThreshold = AmountFromValue(json.find("stakecombinethreshold")->second);
             } catch (std::exception &e) {
                 sError = "\"stakecombinethreshold\" not amount.";
             };
         };
 
-        if (!json["stakesplitthreshold"].type() == null_type)
+        if (json.find("stakesplitthreshold")->second.type() != null_type)
         {
-            try { nStakeSplitThreshold = AmountFromValue(json["stakesplitthreshold"]);
+            try { nStakeSplitThreshold = AmountFromValue(json.find("stakesplitthreshold")->second);
             } catch (std::exception &e) {
                 sError = "\"stakesplitthreshold\" not amount.";
             };
         };
 
-        if (!json["foundationdonationpercent"].type() == null_type)
+        if (json.find("rewardaddress")->second.type() == str_type)
         {
-            try { nWalletDevFundCedePercent = json["foundationdonationpercent"].get_int();
-            } catch (std::exception &e) {
-                sError = "\"foundationdonationpercent\" not integer.";
-            };
-        };
-
-        if (json["rewardaddress"].type() == str_type)
-        {
-            try { rewardAddress = CBitcoinAddress(json["rewardaddress"].get_str());
+            try { rewardAddress = CBitcoinAddress(json.find("rewardaddress")->second.get_str());
             } catch (std::exception &e) {
                 sError = "Setting \"rewardaddress\" failed.";
             };
@@ -6079,11 +6072,10 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     // If a coldstaking address is loaded, then send the output to a coldstaking script
                     Value jsonSettings;
                     if ((GetSetting("changeaddress"), jsonSettings)
-                        && jsonSettings["coldstakingaddress"].type() == str_type)
+                        && jsonSettings.find("coldstakingaddress")->second.type() == str_type)
                     {
                         std::string sAddress;
-                        try {
-                            sAddress = jsonSettings["coldstakingaddress"].get_str();
+                        try { sAddress = jsonSettings.find("coldstakingaddress")->second.get_str();
                         } catch (std::exception &e) {
                             return error("%s: Get coldstaking address failed %s.", __func__, e.what());
                         };

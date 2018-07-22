@@ -3247,9 +3247,9 @@ Value walletsettings(const Array &request, bool fHelp)
                 "Pass an empty json object to clear the settings group.\n"
                 "\nExamples\n"
                 "Set coldstaking changeaddress extended public key:\n"
-                "walletsettings", "changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"\n"
+                "walletsettings changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"\n"
                                                                                                                          "Clear changeaddress settings\n"
-                "walletsettings", "changeaddress \"{}\"\n"
+                "walletsettings changeaddress \"{}\"\n"
         );
 
     // Make sure the results are valid at least up to the most recent block
@@ -3279,14 +3279,11 @@ Value walletsettings(const Array &request, bool fHelp)
             return result;
         };
 
-
-
         if (request[1].type() == obj_type)
         {
             json = request[1].get_obj();
 
-            const std::vector<std::string> &vKeys = json.name_.get_str();
-            if (vKeys.size() < 1)
+            if (json.size() < 1)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
                     throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
@@ -3294,24 +3291,29 @@ Value walletsettings(const Array &request, bool fHelp)
                 return result;
             };
 
-            for (const auto &sKey : vKeys)
+            for (Object::size_type i = 0; i != json.size(); ++i)
             {
-                if (sKey == "address_standard")
+                const Pair& pair = json[i];
+
+                const String& name = pair.name_;
+                const Value& value = pair.value_;
+
+                if (name == "address_standard")
                 {
-                    if (json.value_.type() != str_type)
+                    if (value.type() != str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("address_standard must be a string."));
 
-                    std::string sAddress = json.value_.get_str();
+                    std::string sAddress = value.get_str();
                     CBitcoinAddress addr(sAddress);
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
                 } else
-                if (sKey == "coldstakingaddress")
+                if (name == "coldstakingaddress")
                 {
-                    if (json_value.type() != str_type)
+                    if (value.type() != str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress must be a string."));
 
-                    std::string sAddress = json.value_.get_str();
+                    std::string sAddress = value.get_str();
                     CBitcoinAddress addr(sAddress);
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
@@ -3331,9 +3333,10 @@ Value walletsettings(const Array &request, bool fHelp)
                     //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
                 } else
                 {
-                    warnings.push_back("Unknown key " + sKey);
+                    warnings.push_back("Unknown key " + name);
                 };
-            };
+            }
+
 
             json.push_back(Pair("time", GetTime()));
             if (!pwalletMain->SetSetting(sSetting, json))
@@ -3365,8 +3368,7 @@ Value walletsettings(const Array &request, bool fHelp)
         {
             json = request.params[1].get_obj();
 
-            const std::vector<std::string> &vKeys = json.name_.get_str();
-            if (vKeys.size() < 1)
+            if (json.size() < 1)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
                     throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
@@ -3376,34 +3378,39 @@ Value walletsettings(const Array &request, bool fHelp)
 
             Value jsonOld;
             bool fHaveOldSetting = pwalletMain->GetSetting(sSetting, jsonOld);
-            for (const auto &sKey : vKeys)
+            for (Object::size_type i = 0; i != json.size(); ++i)
             {
-                if (sKey == "enabled")
+                const Pair& pair = json[i];
+
+                const String& name = pair.name_;
+                const Value& value = pair.value_;
+
+                if (name == "enabled")
                 {
                 } else
-                if (sKey == "stakecombinethreshold")
+                if (name == "stakecombinethreshold")
                 {
-                    int64_t test = AmountFromValue(json.value_);
+                    int64_t test = AmountFromValue(value.get_int());
                     if (test < 0)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
                 } else
-                if (sKey == "stakesplitthreshold")
+                if (name == "stakesplitthreshold")
                 {
-                    int64_t test = AmountFromValue(json.value_);
+                    int64_t test = AmountFromValue(value.get_int());
                     if (test < 0)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
                 } else
-                if (sKey == "rewardaddress")
+                if (name == "rewardaddress")
                 {
-                    if (json.value_.type() == str_type)
+                    if (value.type() == str_type)
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("rewardaddress must be a string."));
 
-                    CBitcoinAddress addr(json.value_.get_str());
+                    CBitcoinAddress addr(value.get_str());
                     if (!addr.IsValid())
                         throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
                 } else
                 {
-                    warnings.push_back("Unknown key " + sKey);
+                    warnings.push_back("Unknown key " + name);
                 };
             };
 
