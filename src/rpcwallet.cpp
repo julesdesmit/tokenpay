@@ -3339,7 +3339,7 @@ Value walletsettings(const Array &request, bool fHelp)
                 result.push_back(Pair(sSetting, "default"));
             } else
             {
-                Object json = jsonValue.get_obj();
+                Object& json = jsonValue.get_obj();
                 result.push_back(Pair(sSetting, json));
             }
             return result;
