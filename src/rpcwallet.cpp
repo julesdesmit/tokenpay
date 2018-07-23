@@ -13,6 +13,7 @@
 #include "ringsig.h"
 #include "smessage.h"
 #include <sstream>
+#include <iostream>
 
 using namespace json_spirit;
 
@@ -3227,7 +3228,7 @@ Value walletsettings(const Array &request, bool fHelp)
 
     if (fHelp || request.size() < 1 || request.size() > 2)
         throw std::runtime_error(
-                "walletsettings \"setting\" {...}\n"
+                "walletsettings \"[setting]\" [value]\n"
                 "\nManage wallet settings.\n"
                 + HelpRequiringPassphrase() +
                 "\nArguments:\n"
@@ -3247,9 +3248,9 @@ Value walletsettings(const Array &request, bool fHelp)
                 "Pass an empty json object to clear the settings group.\n"
                 "\nExamples\n"
                 "Set coldstaking changeaddress extended public key:\n"
-                "walletsettings changeaddress \"{\\\"coldstakingaddress\\\":\\\"extpubkey\\\"}\"\n"
+                "walletsettings changeaddress coldstakingaddress [extpubkey]\n"
                                                                                                                          "Clear changeaddress settings\n"
-                "walletsettings changeaddress \"{}\"\n"
+                "walletsettings changeaddress \"\"\n"
         );
 
     // Make sure the results are valid at least up to the most recent block
@@ -3264,111 +3265,100 @@ Value walletsettings(const Array &request, bool fHelp)
 
     if (sSetting == "changeaddress")
     {
-        Object json;
+        Value jsonValue;
         Array warnings;
 
         if (request.size() == 1)
         {
-            if (!pwalletMain->GetSetting("changeaddress", json))
+            if (!pwalletMain->GetSetting("changeaddress", jsonValue))
             {
                 result.push_back(Pair(sSetting, "default"));
             } else
             {
+                Object& json = jsonValue.get_obj();
                 result.push_back(Pair(sSetting, json));
             };
             return result;
-        };
-
-        if (request[1].type() == obj_type)
+        } else
         {
-            json = request[1].get_obj();
-
-            if (json.size() < 1)
+            if (request.size() == 2)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
                     throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
                 result.push_back(Pair(sSetting, "cleared"));
                 return result;
-            };
-
-            for (Object::size_type i = 0; i != json.size(); ++i)
-            {
-                const Pair& pair = json[i];
-
-                const String& name = pair.name_;
-                const Value& value = pair.value_;
-
-                if (name == "address_standard")
-                {
-                    if (value.type() != str_type)
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("address_standard must be a string."));
-
-                    std::string sAddress = value.get_str();
-                    CBitcoinAddress addr(sAddress);
-                    if (!addr.IsValid())
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
-                } else
-                if (name == "coldstakingaddress")
-                {
-                    if (value.type() != str_type)
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress must be a string."));
-
-                    std::string sAddress = value.get_str();
-                    CBitcoinAddress addr(sAddress);
-                    if (!addr.IsValid())
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
-                    if (IsStealthAddress(sAddress))
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
-
-                    // TODO: override option?
-                    // if (pwalletMain->HaveAddress(addr.Get()))
-                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
-                    // if (pwalletMain->idDefaultAccount())
-                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
-
-                    // This will need to be refactored appropriately for the codebase if this requires a hardfork.
-                    //
-                    // const Consensus::Params& consensusParams = Params().GetConsensus();
-                    // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
-                    //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
-                } else
-                {
-                    warnings.push_back("Unknown key " + name);
-                };
             }
 
+            Object json;
+            json.push_back(Pair(request[1], request[2]));
+            if (request[1] == "address_standard")
+            {
 
-            json.push_back(Pair("time", GetTime()));
-            if (!pwalletMain->SetSetting(sSetting, json))
+                std::string sAddress = request[2].get_str();
+                CBitcoinAddress addr(sAddress);
+                if (!addr.IsValid())
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
+            } else
+            if (request[1] == "coldstakingaddress")
+            {
+                if (request.size() == 2)
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("No coldstakingaddress given."));
+
+                std::string sAddress = request[2].get_str();
+                CBitcoinAddress addr(sAddress);
+                if (!addr.IsValid())
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
+                if (IsStealthAddress(sAddress))
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
+
+                // TODO: override option?
+                // if (pwalletMain->HaveAddress(addr.Get()))
+                //     throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
+                // if (pwalletMain->idDefaultAccount())
+                //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
+
+                // This will need to be refactored appropriately for the codebase if this requires a hardfork.
+                //
+                // const Consensus::Params& consensusParams = Params().GetConsensus();
+                // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
+                //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
+            } else
+            {
+                warnings.push_back("Unknown key " + name);
+            };
+
+            Value sJson;
+            sJson.read(json);
+            if (!pwalletMain->SetSetting(sSetting, sJson))
                 throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
 
             if (warnings.size() > 0)
                 result.push_back(Pair("warnings", warnings));
-        } else
-        {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, _("Must be json object."));
-        };
+        }
         result.push_back(Pair(sSetting, json));
     } else
     if (sSetting == "stakingoptions")
     {
-        Object json;
+        Value jsonValue;
         Array warnings;
 
         if (request.size() == 1)
         {
-            if (!pwalletMain->GetSetting("stakingoptions", json))
+            if (!pwalletMain->GetSetting("stakingoptions", jsonValue))
+            {
                 result.push_back(Pair(sSetting, "default"));
-            else
+            } else
+            {
+                Object json = jsonValue.get_obj();
                 result.push_back(Pair(sSetting, json));
+            }
             return result;
-        };
-
-        if (request[1].type() == obj_type)
+        } else
         {
-            json = request.params[1].get_obj();
+            Object json;
+            json.push_back(Pair(request[1], request[2]));
 
-            if (json.size() < 1)
+            if (request.size() == 2)
             {
                 if (!pwalletMain->EraseSetting(sSetting))
                     throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
@@ -3378,44 +3368,35 @@ Value walletsettings(const Array &request, bool fHelp)
 
             Value jsonOld;
             bool fHaveOldSetting = pwalletMain->GetSetting(sSetting, jsonOld);
-            for (Object::size_type i = 0; i != json.size(); ++i)
+
+            if (request[1] == "enabled")
             {
-                const Pair& pair = json[i];
-
-                const String& name = pair.name_;
-                const Value& value = pair.value_;
-
-                if (name == "enabled")
-                {
-                } else
-                if (name == "stakecombinethreshold")
-                {
-                    int64_t test = AmountFromValue(value.get_int());
-                    if (test < 0)
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
-                } else
-                if (name == "stakesplitthreshold")
-                {
-                    int64_t test = AmountFromValue(value.get_int());
-                    if (test < 0)
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
-                } else
-                if (name == "rewardaddress")
-                {
-                    if (value.type() == str_type)
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("rewardaddress must be a string."));
-
-                    CBitcoinAddress addr(value.get_str());
-                    if (!addr.IsValid())
-                        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
-                } else
-                {
-                    warnings.push_back("Unknown key " + name);
-                };
+            } else
+            if (request[1] == "stakecombinethreshold")
+            {
+                int64_t test = AmountFromValue(request[2].get_int());
+                if (test < 0)
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
+            } else
+            if (request[1] == "stakesplitthreshold")
+            {
+                int64_t test = AmountFromValue(request[2].get_int());
+                if (test < 0)
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
+            } else
+            if (request[1] == "rewardaddress")
+            {
+                CBitcoinAddress addr(request[2].get_str());
+                if (!addr.IsValid())
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
+            } else
+            {
+                warnings.push_back("Unknown key " + name);
             };
 
-            json.push_back(Pair("time", GetTime()));
-            if (!pwalletMain->SetSetting(sSetting, json))
+            Value sJson;
+            sJson.read(json);
+            if (!pwalletMain->SetSetting(sSetting, sJson))
                 throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
 
             std::string sError;
@@ -3429,10 +3410,7 @@ Value walletsettings(const Array &request, bool fHelp)
 
             if (warnings.size() > 0)
                 result.push_back(Pair("warnings", warnings));
-        } else
-        {
-            throw JSONRPCError(RPC_INVALID_PARAMETER, _("Must be json object."));
-        };
+        }
         result.push_back(Pair(sSetting, json));
     } else
     {

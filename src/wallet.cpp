@@ -216,10 +216,11 @@ bool CWallet::ProcessStakingSettings(std::string &sError)
     nStakeSplitThreshold = 2000 * COIN;
     nMaxStakeCombine = 3;
 
-    Value json;
-    if (GetSetting("stakingoptions", json))
+    Value jsonValue;
+    if (GetSetting("stakingoptions", jsonValue))
     {
 
+        Object& json = jsonValue.get_obj();
         if (json.find("enabled")->second.type() != null_type)
         {
             try { fStakingEnabled = json.find("enabled")->second.get_bool();
@@ -230,7 +231,7 @@ bool CWallet::ProcessStakingSettings(std::string &sError)
 
         if (json.find("stakecombinethreshold")->second.type() != null_type)
         {
-            try { nStakeCombineThreshold = AmountFromValue(json.find("stakecombinethreshold")->second);
+            try { nStakeCombineThreshold = AmountFromValue(json.find("stakecombinethreshold")->second.get_int());
             } catch (std::exception &e) {
                 sError = "\"stakecombinethreshold\" not amount.";
             };
@@ -238,7 +239,7 @@ bool CWallet::ProcessStakingSettings(std::string &sError)
 
         if (json.find("stakesplitthreshold")->second.type() != null_type)
         {
-            try { nStakeSplitThreshold = AmountFromValue(json.find("stakesplitthreshold")->second);
+            try { nStakeSplitThreshold = AmountFromValue(json.find("stakesplitthreshold")->second.get_int());
             } catch (std::exception &e) {
                 sError = "\"stakesplitthreshold\" not amount.";
             };
@@ -6078,41 +6079,44 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     scriptPubKeyKernel << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
 
                     // If a coldstaking address is loaded, then send the output to a coldstaking script
-                    Value jsonSettings;
-                    if ((GetSetting("changeaddress"), jsonSettings)
-                        && jsonSettings.find("coldstakingaddress")->second.type() == str_type)
+                    Value jsonValue;
+                    if (GetSetting("changeaddress"), jsonValue)
                     {
-                        std::string sAddress;
-                        try { sAddress = jsonSettings.find("coldstakingaddress")->second.get_str();
-                        } catch (std::exception &e) {
-                            return error("%s: Get coldstaking address failed %s.", __func__, e.what());
-                        };
-
-                        if (fDebugPoS)
-                            LogPrintf("Sending output to coldstakingscript %s.", sAddress);
-
-                        CBitcoinAddress addrColdStaking(sAddress);
-                        CScript scriptStaking;
-                        if (!GetScriptForAddress(scriptStaking, addrColdStaking, true))
-                            return error("%s: GetScriptForAddress failed.", __func__);
-
-                        // Get new key from the active internal chain
-                        CPubKey pkSpend;
-                        if (0 != GetChangeAddress(pkSpend))
-                            return error("%s: GetChangeAddress failed.", __func__);
-                        CKeyID pkSpendId = pkSpend.GetID();
-                        scriptPubKeyKernel = GetScriptForDestination(pkSpendId);
-
-                        if (scriptStaking.IsPayToPublicKeyHash())
+                        Object& jsonSettings = jsonValue.get_obj();
+                        if (jsonSettings.find("coldstakingaddress")->second.type() == str_type)
                         {
-                            CScript script = CScript() << OP_ISCOINSTAKE << OP_IF;
-                            script += scriptStaking;
-                            script << OP_ELSE;
-                            script += scriptPubKeyKernel;
-                            script << OP_ENDIF;
+                            std::string sAddress;
+                            try { sAddress = jsonSettings.find("coldstakingaddress")->second.get_str();
+                            } catch (std::exception &e) {
+                                return error("%s: Get coldstaking address failed %s.", __func__, e.what());
+                            };
 
-                            scriptPubKeyKernel = script;
-                            scriptPubKeyOut = script;
+                            if (fDebugPoS)
+                                LogPrintf("Sending output to coldstakingscript %s.", sAddress);
+
+                            CBitcoinAddress addrColdStaking(sAddress);
+                            CScript scriptStaking;
+                            if (!GetScriptForAddress(scriptStaking, addrColdStaking, true))
+                                return error("%s: GetScriptForAddress failed.", __func__);
+
+                            // Get new key from the active internal chain
+                            CPubKey pkSpend;
+                            if (0 != GetChangeAddress(pkSpend))
+                                return error("%s: GetChangeAddress failed.", __func__);
+                            CKeyID pkSpendId = pkSpend.GetID();
+                            scriptPubKeyKernel = GetScriptForDestination(pkSpendId);
+
+                            if (scriptStaking.IsPayToPublicKeyHash())
+                            {
+                                CScript script = CScript() << OP_ISCOINSTAKE << OP_IF;
+                                script += scriptStaking;
+                                script << OP_ELSE;
+                                script += scriptPubKeyKernel;
+                                script << OP_ENDIF;
+
+                                scriptPubKeyKernel = script;
+                                scriptPubKeyOut = script;
+                            }
                         }
                     }
                 }
