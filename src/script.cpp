@@ -527,8 +527,25 @@ bool EvalScript(vector<vector<unsigned char> >& stack, const CScript& script, co
 
                     break;
                 }
+
+                case OP_ISCOINSTAKE:
+                {
+                    opcodetype opbool;
+
+                    if (txTo.IsCoinStake())
+                    {
+                        opbool = OP_TRUE;
+                    } else
+                    {
+                        opbool = OP_FALSE;
+                    }
+
+                    CBigNum bn(opbool);
+                    stack.push_back(bn.getvch());
+                    break;
+                }
                 case OP_NOP1: case OP_NOP3: case OP_NOP4: case OP_NOP5:
-                case OP_NOP6: case OP_NOP7: case OP_NOP8: case OP_NOP9:
+                case OP_NOP6: case OP_NOP7: case OP_NOP8:
                 {
                     if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS)
                         return false;
