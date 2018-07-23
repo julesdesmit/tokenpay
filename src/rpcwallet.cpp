@@ -3211,14 +3211,6 @@ Value txnreport(const Array& params, bool fHelp)
     return result;
 }
 
-bool EnsureWalletIsAvailable(CWallet * const pwallet, bool avoidException)
-{
-    if (pwallet) return true;
-    if (avoidException) return false;
-    throw JSONRPCError(RPC_WALLET_ERROR,
-                       "Wallet file not specified (must request wallet RPC through /wallet/<filename> uri-path).");
-}
-
 Value walletsettings(const Array &request, bool fHelp)
 {
     // std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
@@ -3256,8 +3248,6 @@ Value walletsettings(const Array &request, bool fHelp)
     // Make sure the results are valid at least up to the most recent block
     // the user could have gotten from another RPC command prior to now
     // pwalletMain->BlockUntilSyncedToCurrentChain();
-
-    EnsureWalletIsUnlocked();
 
     Object result;
 
