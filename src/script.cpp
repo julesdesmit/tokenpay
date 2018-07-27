@@ -2135,7 +2135,7 @@ public:
 
     bool operator()(const CKeyID &keyID) const {
         script->clear();
-        *script << OP_DUP << OP_HASH160 << keyID << OP_EQUALVERIFY << OP_CHECKSIG;
+        *script << OP_DUP << OP_HASH160 << ToByteVector(keyID) << OP_EQUALVERIFY << OP_CHECKSIG;
         return true;
     }
 

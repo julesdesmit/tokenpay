@@ -749,6 +749,8 @@ bool VerifySignature(const CTransaction& txFrom, const CTransaction& txTo, unsig
 // combine them intelligently and return the result.
 CScript CombineSignatures(CScript scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
 
+bool GetCoinstakeScriptPath(const CScript &scriptIn, CScript &scriptOut);
+
 bool HasIsCoinstakeOp(const CScript &script);
 bool IsSpendScriptP2PKH(const CScript &script);
 CScript GetScriptForDestination(const CTxDestination& dest);

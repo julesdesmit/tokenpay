@@ -1723,11 +1723,34 @@ void CWallet::AvailableCoinsForStaking(std::vector<COutput>& vCoins, unsigned in
 
             for (unsigned int i = 0; i < pcoin->vout.size(); i++)
             {
-                if (pcoin->nVersion == ANON_TXN_VERSION
-                    && pcoin->vout[i].IsAnonOutput())
-                    continue;
-                if (!(pcoin->IsSpent(i)) && IsMine(pcoin->vout[i]) && pcoin->vout[i].nValue >= nMinimumInputValue)
-                    vCoins.push_back(COutput(pcoin, i, nDepth));
+                std::vector<std::vector<uint8_t> > vSolutionsRet;
+                txnouttype typeRet;
+
+                const CScript *pscriptPubKey = pcoin->vout[i].scriptPubKey;
+                CScript coinstakePath;
+
+                if (HasIsCoinstakeOp(*pscriptPubKey))
+                {
+                    if (!GetCoinstakeScriptPath(*pscriptPubKey, coinstakePath))
+                        continue;
+                    pscriptPubKey = &coinstakePath;
+
+                    if (!Solver(*pscriptPubKey, typeRet, vSolutionsRet)
+                        || typeRet != TX_PUBKEYHASH)
+                        continue;
+
+                    CKeyID keyID = CKeyID(uint160(vSolutionsRet[0]));
+
+                    if (HaveKey(keyID))
+                        vCoins.push_back(COutput(pcoin, i, nDepth));
+                } else
+                {
+                    if (pcoin->nVersion == ANON_TXN_VERSION
+                        && pcoin->vout[i].IsAnonOutput())
+                        continue;
+                    if (!(pcoin->IsSpent(i)) && IsMine(pcoin->vout[i]) && pcoin->vout[i].nValue >= nMinimumInputValue)
+                        vCoins.push_back(COutput(pcoin, i, nDepth));
+                }
             };
         };
     }
@@ -5888,57 +5911,6 @@ bool CWallet::EraseSetting(const std::string& setting)
     return true;
 }
 
-bool CWallet::GetScriptForAddress(CScript &script, const CBitcoinAddress &addr, bool fUpdate, std::vector<uint8_t> *vData)
-{
-    LOCK(cs_wallet);
-
-    CTxDestination dest = addr.Get();
-    if (dest.type() == typeid(CStealthAddress))
-    {
-        if (!vData)
-            return error("%s: StealthAddress, vData is null .", __func__);
-
-        CStealthAddress sx = boost::get<CStealthAddress>(dest);
-        std::vector<CTempRecipient> vecSend;
-        std::string strError;
-        CTempRecipient r;
-        r.nType = OUTPUT_STANDARD;
-        r.address = sx;
-        vecSend.push_back(r);
-
-        if (0 != ExpandTempRecipients(vecSend, NULL, strError) || vecSend.size() != 2)
-            return error("%s: ExpandTempRecipients failed, %s.", __func__, strError);
-
-        script = vecSend[0].scriptPubKey;
-        *vData = vecSend[1].vData;
-    } else
-    if (dest.type() == typeid(CExtKeyPair))
-    {
-        CExtKeyPair ek = boost::get<CExtKeyPair>(dest);
-        uint32_t nChildKey;
-
-        CPubKey pkTemp;
-        if (0 != ExtKeyGetDestination(ek, pkTemp, nChildKey))
-            return error("%s: ExtKeyGetDestination failed.", __func__);
-
-        nChildKey++;
-        if (fUpdate)
-            ExtKeyUpdateLooseKey(ek, nChildKey, false);
-
-        script = GetScriptForDestination(pkTemp.GetID());
-    } else
-    if (dest.type() == typeid(CKeyID))
-    {
-        CKeyID idk = boost::get<CKeyID>(dest);
-        script = GetScriptForDestination(idk);
-    } else
-    {
-        return error("%s: Unknown destination type.", __func__);
-    };
-
-    return true;
-};
-
 bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64_t nFees, CTransaction& txNew, CKey& key)
 {
     CBlockIndex* pindexPrev = pindexBest;
@@ -5998,7 +5970,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                 txnouttype whichType;
                 CScript scriptPubKeyOut;
                 CTxOut *kernelOut = pcoin.first->vout[pcoin.second].get();
-                const CScript *pscriptPubKey = &kernelOut.scriptPubKey;
+                const CScript *pscriptPubKey = &kernelOut->scriptPubKey;
 
                 CScript coinstakePath;
                 bool fConditionalStake = false;
@@ -6010,7 +5982,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     pscriptPubKey = &coinstakePath;
                 }
 
-                if (!Solver(scriptPubKeyKernel, whichType, vSolutions))
+                if (!Solver(*pscriptPubKey, whichType, vSolutions))
                 {
                     if (fDebugPoS)
                         LogPrintf("CreateCoinStake : failed to parse kernel\n");
@@ -6038,8 +6010,8 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                             LogPrintf("CreateCoinStake : failed to get key for kernel type=%d\n", whichType);
                         break;  // unable to find corresponding public key
                     };
-                    scriptPubKeyOut << key.GetPubKey() << OP_CHECKSIG;
                     spendId = CKeyID(uint160(vSolutions[0]));
+                    scriptPubKeyOut << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
                 };
 
                 if (whichType == TX_PUBKEY)
@@ -6070,11 +6042,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     break;
                 }
 
-                if (fConditionalStake)
-                {
-                    scriptPubKeyKernel = kernelOut->scriptPubKey;
-                    scriptPubKeyOut = scriptPubKeyKernel;
-                } else
+                if (!fConditionalStake)
                 {
                     scriptPubKeyKernel << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
 
@@ -6095,9 +6063,31 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                                 LogPrintf("Sending output to coldstakingscript %s.", sAddress);
 
                             CBitcoinAddress addrColdStaking(sAddress);
+                            CTxDestination destColdStaking = addrColdStaking.Get();
                             CScript scriptStaking;
-                            if (!GetScriptForAddress(scriptStaking, addrColdStaking, true))
-                                return error("%s: GetScriptForAddress failed.", __func__);
+
+                            if (destColdStaking.type() == typeid(CExtKeyPair))
+                            {
+                                CExtKeyPair ek = boost::get<CExtKeyPair>(destColdStaking);
+                                uint32_t nChildKey;
+
+                                CPubKey pkTemp;
+                                if (0 != ExtKeyGetDestination(ek, pkTemp, nChildKey))
+                                    return error("%s: ExtKeyGetDestination failed.", __func__);
+
+                                nChildKey++;
+                                ExtKeyUpdateLooseKey(ek, nChildKey, false);
+
+                                scriptStaking = GetScriptForDestination(pkTemp.GetID());
+                            } else
+                            if (destColdStaking.type() == typeid(CKeyID))
+                            {
+                                CKeyID idk = boost::get<CKeyID>(destColdStaking);
+                                scriptStaking = GetScriptForDestination(idk);
+                            } else
+                            {
+                                return error("%s: Unknown coldstakingaddress type.", __func__);
+                            }
 
                             // Get new key from the active internal chain
                             CPubKey pkSpend;

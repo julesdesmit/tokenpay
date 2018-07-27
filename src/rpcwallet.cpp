@@ -3245,10 +3245,6 @@ Value walletsettings(const Array &request, bool fHelp)
                 "walletsettings changeaddress \"\"\n"
         );
 
-    // Make sure the results are valid at least up to the most recent block
-    // the user could have gotten from another RPC command prior to now
-    // pwalletMain->BlockUntilSyncedToCurrentChain();
-
     Object result;
 
     std::string sSetting = request[0].get_str();
@@ -3301,11 +3297,10 @@ Value walletsettings(const Array &request, bool fHelp)
                 if (IsStealthAddress(sAddress))
                     throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
 
-                // TODO: override option?
-                // if (pwalletMain->HaveAddress(addr.Get()))
-                //     throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
-                // if (pwalletMain->idDefaultAccount())
-                //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("Wallet must have a default account set."));
+                CKeyID addrKey;
+                addr.GetKeyID(addrKey);
+                if (pwalletMain->HaveKey(addrKey))
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
 
                 // This will need to be refactored appropriately for the codebase if this requires a hardfork.
                 //
