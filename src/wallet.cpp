@@ -6042,7 +6042,11 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     break;
                 }
 
-                if (!fConditionalStake)
+                if (fConditionalStake)
+                {
+                    scriptPubKeyKernel = kernelOut->scriptPubKey;
+                    scriptPubKeyOut = scriptPubKeyKernel;
+                } else
                 {
                     scriptPubKeyKernel << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
 
