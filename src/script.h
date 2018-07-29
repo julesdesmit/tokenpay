@@ -750,6 +750,7 @@ bool VerifySignature(const CTransaction& txFrom, const CTransaction& txTo, unsig
 CScript CombineSignatures(CScript scriptPubKey, const CTransaction& txTo, unsigned int nIn, const CScript& scriptSig1, const CScript& scriptSig2);
 
 bool GetCoinstakeScriptPath(const CScript &scriptIn, CScript &scriptOut);
+bool SplitConditionalCoinstakeScript(const CScript &scriptIn, CScript &scriptOutA, CScript &scriptOutB);
 
 bool HasIsCoinstakeOp(const CScript &script);
 bool IsSpendScriptP2PKH(const CScript &script);

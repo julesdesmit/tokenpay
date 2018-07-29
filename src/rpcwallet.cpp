@@ -3213,7 +3213,7 @@ Value txnreport(const Array& params, bool fHelp)
 
 Value walletsettings(const Array &request, bool fHelp)
 {
-    
+
     if (!EnsureWalletIsAvailable(pwalletMain, fHelp))
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet unavailable");
 

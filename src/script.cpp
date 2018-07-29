@@ -2392,3 +2392,47 @@ bool GetCoinstakeScriptPath(const CScript &scriptIn, CScript &scriptOut)
 
     return false;
 };
+
+// To split up coldstaking scripts
+bool SplitConditionalCoinstakeScript(const CScript &scriptIn, CScript &scriptOutA, CScript &scriptOutB)
+{
+    CScript::const_iterator pc = scriptIn.begin();
+    CScript::const_iterator pend = scriptIn.end();
+    CScript::const_iterator pcStart = pc;
+
+    opcodetype opcode;
+    valtype vchPushValue;
+
+    bool fFoundOp = false, fFoundElse = false;
+    while (pc < pend)
+    {
+        if (!scriptIn.GetOp(pc, opcode, vchPushValue))
+            break;
+
+        if (!fFoundOp
+            && opcode == OP_ISCOINSTAKE)
+        {
+            pc++; // skip over if
+
+            pcStart = pc;
+            fFoundOp = true;
+            continue;
+        };
+
+        if (fFoundElse && opcode == OP_ENDIF)
+        {
+            pc--;
+            scriptOutB = CScript(pcStart, pc);
+            return true;
+        };
+
+        if (fFoundOp && opcode == OP_ELSE)
+        {
+            scriptOutA = CScript(pcStart, pc-1);
+            pcStart = pc;
+            fFoundElse = true;
+        };
+    };
+
+    return false;
+};
