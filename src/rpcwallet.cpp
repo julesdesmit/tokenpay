@@ -3213,8 +3213,7 @@ Value txnreport(const Array& params, bool fHelp)
 
 Value walletsettings(const Array &request, bool fHelp)
 {
-    // std::shared_ptr<CWallet> const wallet = GetWalletForJSONRPCRequest(request);
-    // CHDWallet *const pwallet = GetParticlWallet(wallet.get());
+    
     if (!EnsureWalletIsAvailable(pwalletMain, fHelp))
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet unavailable");
 
@@ -3226,16 +3225,10 @@ Value walletsettings(const Array &request, bool fHelp)
                 "\nArguments:\n"
                 "1. \"setting\"                    (string, required) Settings group to modify.\n"
                 "2. \"value\"                      (json, optional) Settings.\n"
-                "\"changeaddress\" {\n"
+                "\"changeaddress\"\n"
                 "  \"address_standard\"          (string, optional, default=none) Change address for standard inputs.\n"
                 "  \"coldstakingaddress\"        (string, optional, default=none) Cold staking address for standard inputs.\n"
-                "}\n"
-                "\"stakingoptions\" {\n"
-                "  \"enabled\"                   (bool, optional, default=true) Toggle staking enabled on this wallet.\n"
-                "  \"stakecombinethreshold\"     (amount, optional, default=1000) Join outputs below this value.\n"
-                "  \"stakesplitthreshold\"       (amount, optional, default=2000) Split outputs above this value.\n"
-                "  \"rewardaddress\"             (string, optional, default=none) An address which the user portion of the block reward gets sent to.\n"
-                "}\n"
+                "\n"
                 "Omit the json object to print the settings group.\n"
                 "Pass an empty json object to clear the settings group.\n"
                 "\nExamples\n"
@@ -3316,82 +3309,6 @@ Value walletsettings(const Array &request, bool fHelp)
             sJson.read(json);
             if (!pwalletMain->SetSetting(sSetting, sJson))
                 throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
-
-            if (warnings.size() > 0)
-                result.push_back(Pair("warnings", warnings));
-        }
-        result.push_back(Pair(sSetting, json));
-    } else
-    if (sSetting == "stakingoptions")
-    {
-        Value jsonValue;
-        Array warnings;
-
-        if (request.size() == 1)
-        {
-            if (!pwalletMain->GetSetting("stakingoptions", jsonValue))
-            {
-                result.push_back(Pair(sSetting, "default"));
-            } else
-            {
-                Object& json = jsonValue.get_obj();
-                result.push_back(Pair(sSetting, json));
-            }
-            return result;
-        } else
-        {
-            Object json;
-            json.push_back(Pair(request[1], request[2]));
-
-            if (request.size() == 2)
-            {
-                if (!pwalletMain->EraseSetting(sSetting))
-                    throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
-                result.push_back(Pair(sSetting, "cleared"));
-                return result;
-            };
-
-            Value jsonOld;
-            bool fHaveOldSetting = pwalletMain->GetSetting(sSetting, jsonOld);
-
-            if (request[1] == "enabled")
-            {
-            } else
-            if (request[1] == "stakecombinethreshold")
-            {
-                int64_t test = AmountFromValue(request[2].get_int());
-                if (test < 0)
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakecombinethreshold can't be negative."));
-            } else
-            if (request[1] == "stakesplitthreshold")
-            {
-                int64_t test = AmountFromValue(request[2].get_int());
-                if (test < 0)
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("stakesplitthreshold can't be negative."));
-            } else
-            if (request[1] == "rewardaddress")
-            {
-                CBitcoinAddress addr(request[2].get_str());
-                if (!addr.IsValid())
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid rewardaddress."));
-            } else
-            {
-                warnings.push_back("Unknown key " + name);
-            };
-
-            Value sJson;
-            sJson.read(json);
-            if (!pwalletMain->SetSetting(sSetting, sJson))
-                throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
-
-            std::string sError;
-            pwalletMain->ProcessStakingSettings(sError);
-            if (!sError.empty())
-            {
-                result.push_back(Pair("error", sError));
-                if (fHaveOldSetting)
-                    pwalletMain->SetSetting(sSetting, jsonOld);
-            };
 
             if (warnings.size() > 0)
                 result.push_back(Pair("warnings", warnings));

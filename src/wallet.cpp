@@ -207,68 +207,6 @@ bool CWallet::LoadCScript(const CScript& redeemScript)
     return CCryptoKeyStore::AddCScript(redeemScript);
 }
 
-bool CWallet::ProcessStakingSettings(std::string &sError)
-{
-
-    // Set defaults
-    fStakingEnabled = true;
-    nStakeCombineThreshold = 1000 * COIN;
-    nStakeSplitThreshold = 2000 * COIN;
-    nMaxStakeCombine = 3;
-
-    Value jsonValue;
-    if (GetSetting("stakingoptions", jsonValue))
-    {
-
-        Object& json = jsonValue.get_obj();
-        if (json.find("enabled")->second.type() != null_type)
-        {
-            try { fStakingEnabled = json.find("enabled")->second.get_bool();
-            } catch (std::exception &e) {
-                sError = "Setting \"enabled\" failed.";
-            };
-        };
-
-        if (json.find("stakecombinethreshold")->second.type() != null_type)
-        {
-            try { nStakeCombineThreshold = AmountFromValue(json.find("stakecombinethreshold")->second.get_int());
-            } catch (std::exception &e) {
-                sError = "\"stakecombinethreshold\" not amount.";
-            };
-        };
-
-        if (json.find("stakesplitthreshold")->second.type() != null_type)
-        {
-            try { nStakeSplitThreshold = AmountFromValue(json.find("stakesplitthreshold")->second.get_int());
-            } catch (std::exception &e) {
-                sError = "\"stakesplitthreshold\" not amount.";
-            };
-        };
-
-        if (json.find("rewardaddress")->second.type() == str_type)
-        {
-            try { rewardAddress = CBitcoinAddress(json.find("rewardaddress")->second.get_str());
-            } catch (std::exception &e) {
-                sError = "Setting \"rewardaddress\" failed.";
-            };
-        };
-    };
-
-    if (nStakeCombineThreshold < 100 * COIN || nStakeCombineThreshold > 5000 * COIN)
-    {
-        sError = "\"stakecombinethreshold\" must be >= 100 and <= 5000.";
-        nStakeCombineThreshold = 1000 * COIN;
-    };
-
-    if (nStakeSplitThreshold < nStakeCombineThreshold * 2 || nStakeSplitThreshold > 10000 * COIN)
-    {
-        sError = "\"stakesplitthreshold\" must be >= 2x \"stakecombinethreshold\" and <= 10000.";
-        nStakeSplitThreshold = nStakeCombineThreshold * 2;
-    };
-
-    return true;
-};
-
 bool CWallet::Lock()
 {
     if (fDebug)
