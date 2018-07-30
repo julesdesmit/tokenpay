@@ -2483,19 +2483,19 @@ unsigned int HaveKeys(const std::vector<valtype>& pubkeys, const CKeyStore& keys
     return nResult;
 }
 
-isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, SigVersion sigversion)
+isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey)
 {
     bool isInvalid = false;
-    return IsMine(keystore, scriptPubKey, isInvalid, sigversion);
+    return IsMine(keystore, scriptPubKey, isInvalid);
 }
 
-isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest, SigVersion sigversion)
+isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest)
 {
     bool isInvalid = false;
-    return IsMine(keystore, dest, isInvalid, sigversion);
+    return IsMine(keystore, dest, isInvalid);
 }
 
-isminetype IsMine(const CKeyStore &keystore, const CTxDestination& dest, bool& isInvalid, SigVersion sigversion)
+isminetype IsMine(const CKeyStore &keystore, const CTxDestination& dest, bool& isInvalid)
 {
     if (dest.type() == typeid(CStealthAddress))
     {
@@ -2504,7 +2504,7 @@ isminetype IsMine(const CKeyStore &keystore, const CTxDestination& dest, bool& i
     };
 
     CScript script = GetScriptForDestination(dest);
-    return IsMine(keystore, script, isInvalid, sigversion);
+    return IsMine(keystore, script, isInvalid);
 }
 
 isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey, bool& isInvalid)
