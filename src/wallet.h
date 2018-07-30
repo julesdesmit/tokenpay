@@ -77,7 +77,7 @@ public:
 };
 
 bool IsDestMine(const CWallet &wallet, const CTxDestination &dest);
-bool IsMine(const CWallet& wallet, const CScript& scriptPubKey);
+isminetype IsMine(const CWallet& wallet, const CScript& scriptPubKey);
 
 /** A CWallet is an extension of a keystore, which also maintains a set of transactions and balances,
  * and provides the ability to create new transactions.
@@ -233,6 +233,7 @@ public:
     void ReacceptWalletTransactions();
     void ResendWalletTransactions(bool fForce = false);
     int64_t GetBalance() const;
+    int64_t GetStakeableBalance() const;
     int64_t GetTokenPayBalance() const;
     
     int64_t GetUnconfirmedBalance() const;
@@ -309,20 +310,20 @@ public:
     std::set<std::set<CTxDestination> > GetAddressGroupings();
     std::map<CTxDestination, int64_t> GetAddressBalances();
 
-    bool IsMine(const CTxIn& txin) const;
+    isminetype IsMine(const CTxIn& txin) const;
     int64_t GetDebit(const CTxIn& txin) const;
     int64_t GetTokenPayDebit(const CTxIn& txin) const;
     int64_t GetTokenPayCredit(const CTxOut& txout) const;
     
-    bool IsMine(const CTxOut& txout) const
+    isminetype IsMine(const CTxOut& txout) const
     {
         return ::IsMine(*this, txout.scriptPubKey);
     }
-    int64_t GetCredit(const CTxOut& txout) const
+    int64_t GetCredit(const CTxOut& txout, const isminefilter& filter) const
     {
         if (!MoneyRange(txout.nValue))
             throw std::runtime_error("CWallet::GetCredit() : value out of range");
-        return (IsMine(txout) ? txout.nValue : 0);
+        return ((IsMine(txout) & filter) ? txout.nValue : 0);
     }
     bool IsChange(const CTxOut& txout) const;
     int64_t GetChange(const CTxOut& txout) const
@@ -334,7 +335,7 @@ public:
     bool IsMine(const CTransaction& tx) const
     {
         BOOST_FOREACH(const CTxOut& txout, tx.vout)
-            if (IsMine(txout) && txout.nValue >= nMinimumInputValue)
+            if ((IsMine(txout) & ISMINE_SPENDABLE) && txout.nValue >= nMinimumInputValue)
                 return true;
         return false;
     }
@@ -363,7 +364,7 @@ public:
         return nDebit;
     }
     
-    int64_t GetCredit(const CTransaction& tx) const
+    int64_t GetCredit(const CTransaction& tx, const isminefilter& filter) const
     {
         int64_t nCredit = 0;
         BOOST_FOREACH(const CTxOut& txout, tx.vout)
@@ -373,7 +374,7 @@ public:
             {
                 nCredit += GetTokenPayCredit(txout);
             } else
-                nCredit += GetCredit(txout);
+                nCredit += GetCredit(txout, filter);
             if (!MoneyRange(nCredit))
                 throw std::runtime_error("CWallet::GetCredit() : value out of range");
         }
@@ -391,7 +392,7 @@ public:
             {
                 nTokenPay += GetTokenPayCredit(txout);
             } else
-                nTPAY += GetCredit(txout);
+                nTPAY += GetCredit(txout, ISMINE_SPENDABLE);
             if (!MoneyRange(nTPAY)
                 || !MoneyRange(nTokenPay))
                 throw std::runtime_error("CWallet::GetCredit() : value out of range");
@@ -614,12 +615,14 @@ public:
     mutable bool fAvailableCreditCached;
     mutable bool fChangeCached;
     mutable bool fAvailableTokenPayCreditCached;
+    mutable bool fAvailableWatchCreditCached;
     mutable bool fCreditSplitCached;
     mutable int64_t nDebitCached;
     mutable int64_t nCreditCached;
     mutable int64_t nAvailableCreditCached;
     mutable int64_t nChangeCached;
     mutable int64_t nAvailableTokenPayCreditCached;
+    mutable int64_t nAvailableWatchCreditCached;
     
     mutable int64_t nCredTPAYCached;
     mutable int64_t nCredTokenPayCached;
@@ -659,6 +662,7 @@ public:
         fDebitCached = false;
         fCreditCached = false;
         fAvailableCreditCached = false;
+        fAvailableWatchCreditCached = false;
         fAvailableTokenPayCreditCached = false;
         
         nCredTPAYCached = 0;
@@ -669,6 +673,7 @@ public:
         nDebitCached = 0;
         nCreditCached = 0;
         nAvailableCreditCached = 0;
+        nAvailableWatchCreditCached = 0;
         nAvailableTokenPayCreditCached = 0;
         nChangeCached = 0;
         nOrderPos = -1;
@@ -831,7 +836,7 @@ public:
         // GetBalance can assume transactions in mapWallet won't change
         if (fUseCache && fCreditCached)
             return nCreditCached;
-        nCreditCached = pwallet->GetCredit(*this);
+        nCreditCached = pwallet->GetCredit(*this, ISMINE_ALL);
         fCreditCached = true;
         return nCreditCached;
     }
@@ -874,7 +879,7 @@ public:
             if (!IsSpent(i))
             {
                 const CTxOut &txout = vout[i];
-                nCredit += pwallet->GetCredit(txout);
+                nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
                 if (!MoneyRange(nCredit))
                     throw std::runtime_error("CWalletTx::GetAvailableCredit() : value out of range");
             };
@@ -882,6 +887,32 @@ public:
 
         nAvailableCreditCached = nCredit;
         fAvailableCreditCached = true;
+        return nCredit;
+    };
+
+    int64_t GetAvailableWatchOnlyCredit(bool fUseCache=true) const
+    {
+        // Must wait until coinbase is safely deep enough in the chain before valuing it
+        if ((IsCoinBase() || IsCoinStake()) && GetBlocksToMaturity() > 0)
+            return 0;
+
+        if (fUseCache && fAvailableWatchCreditCached)
+            return nAvailableCreditCached;
+
+        int64_t nCredit = 0;
+        for (unsigned int i = 0; i < vout.size(); i++)
+        {
+            if (!IsSpent(i))
+            {
+                const CTxOut &txout = vout[i];
+                nCredit += pwallet->GetCredit(txout, ISMINE_WATCH_ONLY);
+                if (!MoneyRange(nCredit))
+                    throw std::runtime_error("CWalletTx::GetAvailableCredit() : value out of range");
+            };
+        };
+
+        nAvailableWatchCreditCached = nCredit;
+        fAvailableWatchCreditCached = true;
         return nCredit;
     };
     

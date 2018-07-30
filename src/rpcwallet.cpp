@@ -3072,7 +3072,7 @@ Value txnreport(const Array& params, bool fHelp)
                     entry.push_back("spec in");
                     entry.push_back(fCoinBase ? "coinbase" : fCoinStake ? "coinstake" : "");
 
-                    if (pwalletMain->IsMine(txin))
+                    if ((pwalletMain->IsMine(txin)) & ISMINE_SPENDABLE)
                         fOwnCoin = true;
 
                     CTransaction prevTx;
@@ -3171,7 +3171,7 @@ Value txnreport(const Array& params, bool fHelp)
                     if (ExtractDestination(txout.scriptPubKey, address))
                         sAddr = CBitcoinAddress(address).ToString();
 
-                    if (pwalletMain->IsMine(txout))
+                    if ((pwalletMain->IsMine(txout)) & ISMINE_SPENDABLE)
                         fOwnCoin = true;
                 };
 

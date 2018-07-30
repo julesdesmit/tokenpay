@@ -578,7 +578,7 @@ void CWallet::WalletUpdateSpent(const CTransaction &tx, bool fBlock)
                 {
                     LogPrintf("WalletUpdateSpent: bad wtx %s\n", wtx.GetHash().ToString().c_str());
                 } else
-                if (!wtx.IsSpent(txin.prevout.n) && IsMine(wtx.vout[txin.prevout.n]))
+                if (!wtx.IsSpent(txin.prevout.n) && (IsMine(wtx.vout[txin.prevout.n])) & ISMINE_ALL)
                 {
                     LogPrintf("WalletUpdateSpent found spent coin %s TPAY %s\n", FormatMoney(wtx.GetCredit()).c_str(), wtx.GetHash().ToString().c_str());
                     wtx.MarkSpent(txin.prevout.n);
@@ -604,7 +604,7 @@ void CWallet::WalletUpdateSpent(const CTransaction &tx, bool fBlock)
                     continue;
                 };
 
-                if (IsMine(txout))
+                if ((IsMine(txout)) & ISMINE_ALL)
                 {
                     wtx.MarkUnspent(&txout - &tx.vout[0]);
                     wtx.WriteToDisk();
@@ -812,7 +812,7 @@ bool CWallet::AddToWallet(const CWalletTx& wtxIn, const uint256& hashIn)
                 {
                     LogPrintf("AddToWallet(): bad wtx %s\n", wtxPrev.GetHash().ToString().c_str());
                 } else
-                if (!wtxPrev.IsSpent(txin.prevout.n) && IsMine(wtxPrev.vout[txin.prevout.n]))
+                if (!wtxPrev.IsSpent(txin.prevout.n) && (IsMine(wtxPrev.vout[txin.prevout.n])) & ISMINE_ALL)
                 {
 
                     CDataStream stream(SER_NETWORK, PROTOCOL_VERSION);
@@ -936,7 +936,7 @@ bool CWallet::EraseFromWallet(uint256 hash)
 }
 
 
-bool CWallet::IsMine(const CTxIn &txin) const
+isminetype CWallet::IsMine(const CTxIn &txin) const
 {
     {
         LOCK(cs_wallet);
@@ -945,14 +945,13 @@ bool CWallet::IsMine(const CTxIn &txin) const
         {
             const CWalletTx& prev = (*mi).second;
             if (txin.prevout.n < prev.vout.size())
-                if (IsMine(prev.vout[txin.prevout.n]))
-                    return true;
+                return IsMine(prev.vout[txin.prevout.n]);
         };
     }
-    return false;
+    return ISMINE_NO;
 }
 
-int64_t CWallet::GetDebit(const CTxIn &txin) const
+int64_t CWallet::GetDebit(const CTxIn &txin, const isminefilter& filter) const
 {
     {
         LOCK(cs_wallet);
@@ -961,7 +960,7 @@ int64_t CWallet::GetDebit(const CTxIn &txin) const
         {
             const CWalletTx& prev = (*mi).second;
             if (txin.prevout.n < prev.vout.size())
-                if (IsMine(prev.vout[txin.prevout.n]))
+                if ((IsMine(prev.vout[txin.prevout.n])) & filter)
                     return prev.vout[txin.prevout.n].nValue;
         };
     }
@@ -1168,9 +1167,9 @@ void CWalletTx::GetAmounts(list<pair<CTxDestination, int64_t> >& listReceived,
             // Don't report 'change' txouts
             if (pwallet->IsChange(txout))
                 continue;
-            fIsMine = pwallet->IsMine(txout);
+            fIsMine = (pwallet->IsMine(txout) & ISMINE_ALL);
         } else
-        if (!(fIsMine = pwallet->IsMine(txout)))
+        if (!((fIsMine = pwallet->IsMine(txout)) & ISMINE_ALL))
             continue;
 
         // In either case, we need to get the destination address
@@ -1419,7 +1418,7 @@ void CWallet::ReacceptWalletTransactions()
                     if (wtx.IsSpent(i))
                         continue;
 
-                    if (!txindex.vSpent[i].IsNull() && IsMine(wtx.vout[i]))
+                    if (!txindex.vSpent[i].IsNull() && (IsMine(wtx.vout[i]) & ISMINE_ALL))
                     {
                         wtx.MarkSpent(i);
                         fUpdated = true;
@@ -1557,6 +1556,26 @@ int64_t CWallet::GetBalance() const
     return nTotal;
 }
 
+int64_t CWallet::GetStakeableBalance() const
+{
+    int64_t nTotal = 0;
+
+    {
+        LOCK2(cs_main, cs_wallet);
+        for (WalletTxMap::const_iterator it = mapWallet.begin(); it != mapWallet.end(); ++it)
+        {
+            const CWalletTx* pcoin = &(*it).second;
+            if (pcoin->IsTrusted())
+            {
+                nTotal += pcoin->GetAvailableCredit();
+                nTtoal += pcoin->GetAvailableWatchOnlyCredit();
+            }
+        };
+    }
+
+    return nTotal;
+}
+
 int64_t CWallet::GetTokenPayBalance() const
 {
     int64_t nTotal = 0;
@@ -1599,7 +1618,7 @@ int64_t CWallet::GetImmatureBalance() const
         {
             const CWalletTx& pcoin = (*it).second;
             if (pcoin.IsCoinBase() && pcoin.GetBlocksToMaturity() > 0 && pcoin.IsInMainChain())
-                nTotal += GetCredit(pcoin);
+                nTotal += GetCredit(pcoin, ISMINE_ALL);
         }
     }
     return nTotal;
@@ -1630,7 +1649,7 @@ void CWallet::AvailableCoins(std::vector<COutput>& vCoins, bool fOnlyConfirmed, 
                 continue;
 
             for (unsigned int i = 0; i < pcoin->vout.size(); i++)
-                if (!(pcoin->IsSpent(i)) && IsMine(pcoin->vout[i]) && pcoin->vout[i].nValue >= nMinimumInputValue &&
+                if (!(pcoin->IsSpent(i)) && (IsMine(pcoin->vout[i]) & ISMINE_SPENDABLE) && pcoin->vout[i].nValue >= nMinimumInputValue &&
                 (!coinControl || !coinControl->HasSelected() || coinControl->IsSelected((*it).first, i)))
                     vCoins.push_back(COutput(pcoin, i, nDepth));
 
@@ -1686,7 +1705,7 @@ void CWallet::AvailableCoinsForStaking(std::vector<COutput>& vCoins, unsigned in
                     if (pcoin->nVersion == ANON_TXN_VERSION
                         && pcoin->vout[i].IsAnonOutput())
                         continue;
-                    if (!(pcoin->IsSpent(i)) && IsMine(pcoin->vout[i]) && pcoin->vout[i].nValue >= nMinimumInputValue)
+                    if (!(pcoin->IsSpent(i)) && (IsMine(pcoin->vout[i]) & ISMINE_ALL) && pcoin->vout[i].nValue >= nMinimumInputValue)
                         vCoins.push_back(COutput(pcoin, i, nDepth));
                 }
             };
@@ -1742,7 +1761,7 @@ int64_t CWallet::GetStake() const
     {
         const CWalletTx* pcoin = &(*it).second;
         if (pcoin->IsCoinStake() && pcoin->GetBlocksToMaturity() > 0 && pcoin->GetDepthInMainChain() > 0)
-            nTotal += CWallet::GetCredit(*pcoin);
+            nTotal += CWallet::GetCredit(*pcoin, ISMINE_ALL);
     };
     return nTotal;
 }
@@ -1755,7 +1774,7 @@ int64_t CWallet::GetNewMint() const
     {
         const CWalletTx* pcoin = &(*it).second;
         if (pcoin->IsCoinBase() && pcoin->GetBlocksToMaturity() > 0 && pcoin->GetDepthInMainChain() > 0)
-            nTotal += CWallet::GetCredit(*pcoin);
+            nTotal += CWallet::GetCredit(*pcoin, ISMINE_ALL);
     };
     return nTotal;
 }
@@ -5864,7 +5883,7 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
     txNew.vout.push_back(CTxOut(0, scriptEmpty));
 
     // Choose coins to use
-    int64_t nBalance = GetBalance();
+    int64_t nBalance = GetStakeableBalance();
 
     if (nBalance <= nReserveBalance)
         return false;
@@ -6712,7 +6731,7 @@ std::map<CTxDestination, int64_t> CWallet::GetAddressBalances()
             for (unsigned int i = 0; i < pcoin->vout.size(); i++)
             {
                 CTxDestination addr;
-                if (!IsMine(pcoin->vout[i]))
+                if (!(IsMine(pcoin->vout[i])) & ISMINE_ALL)
                     continue;
                 if(!ExtractDestination(pcoin->vout[i].scriptPubKey, addr))
                     continue;
@@ -6739,7 +6758,7 @@ std::set<std::set<CTxDestination> > CWallet::GetAddressGroupings()
     {
         CWalletTx *pcoin = &walletEntry.second;
 
-        if (pcoin->vin.size() > 0 && IsMine(pcoin->vin[0]))
+        if (pcoin->vin.size() > 0 && (IsMine(pcoin->vin[0])) & ISMINE_ALL)
         {
             // group all input addresses with each other
             BOOST_FOREACH(CTxIn txin, pcoin->vin)
@@ -6768,7 +6787,7 @@ std::set<std::set<CTxDestination> > CWallet::GetAddressGroupings()
 
         // group lone addrs by themselves
         for (unsigned int i = 0; i < pcoin->vout.size(); i++)
-            if (IsMine(pcoin->vout[i]))
+            if ((IsMine(pcoin->vout[i])) & ISMINE_ALL)
             {
                 CTxDestination address;
                 if(!ExtractDestination(pcoin->vout[i].scriptPubKey, address))
@@ -6843,7 +6862,7 @@ void CWallet::FixSpentCoins(int& nMismatchFound, int64_t& nBalanceInQuestion, bo
             continue;
         for (unsigned int n=0; n < pcoin->vout.size(); n++)
         {
-            if (IsMine(pcoin->vout[n]) && pcoin->IsSpent(n) && (txindex.vSpent.size() <= n || txindex.vSpent[n].IsNull()))
+            if ((IsMine(pcoin->vout[n]) & ISMINE_SPENDABLE) && pcoin->IsSpent(n) && (txindex.vSpent.size() <= n || txindex.vSpent[n].IsNull()))
             {
                 LogPrintf("FixSpentCoins found lost coin %s TPAY %s[%d], %s\n",
                     FormatMoney(pcoin->vout[n].nValue).c_str(), pcoin->GetHash().ToString().c_str(), n, fCheckOnly? "repair not attempted" : "repairing");
@@ -6855,7 +6874,7 @@ void CWallet::FixSpentCoins(int& nMismatchFound, int64_t& nBalanceInQuestion, bo
                     pcoin->WriteToDisk();
                 };
             } else
-            if (IsMine(pcoin->vout[n]) && !pcoin->IsSpent(n) && (txindex.vSpent.size() > n && !txindex.vSpent[n].IsNull()))
+            if ((IsMine(pcoin->vout[n]) & ISMINE_SPENDABLE) && !pcoin->IsSpent(n) && (txindex.vSpent.size() > n && !txindex.vSpent[n].IsNull()))
             {
                 LogPrintf("FixSpentCoins found spent coin %s TPAY %s[%d], %s\n",
                     FormatMoney(pcoin->vout[n].nValue).c_str(), pcoin->GetHash().ToString().c_str(), n, fCheckOnly? "repair not attempted" : "repairing");
@@ -6887,7 +6906,7 @@ void CWallet::DisableTransaction(const CTransaction &tx)
         if (mi != mapWallet.end())
         {
             CWalletTx& prev = (*mi).second;
-            if (txin.prevout.n < prev.vout.size() && IsMine(prev.vout[txin.prevout.n]))
+            if (txin.prevout.n < prev.vout.size() && (IsMine(prev.vout[txin.prevout.n])) & ISMINE_ALL)
             {
                 prev.MarkUnspent(txin.prevout.n);
                 prev.WriteToDisk();
@@ -9101,43 +9120,151 @@ static unsigned int HaveKeys(const vector<valtype>& pubkeys, const CWallet& wall
     return nResult;
 }
 
-bool IsMine(const CWallet &wallet, const CScript& scriptPubKey)
+isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
 {
-    vector<valtype> vSolutions;
+    if (HasIsCoinstakeOp(scriptPubKey))
+    {
+        CScript scriptA, scriptB;
+        if (!SplitConditionalCoinstakeScript(scriptPubKey, scriptA, scriptB))
+            return ISMINE_NO;
+
+        isminetype typeB = IsMine(scriptB, keyID, isInvalid);
+        if (typeB & ISMINE_SPENDABLE)
+            return typeB;
+
+        isminetype typeA = IsMine(scriptA, keyID, isInvalid);
+
+        if (typeA & ISMINE_SPENDABLE) {
+            int ia = (int) typeA;
+            ia &= ~ISMINE_SPENDABLE;
+            ia |= ISMINE_WATCH_COLDSTAKE;
+            typeA = (isminetype) ia;
+        };
+
+        return (isminetype) ((int) typeA | (int) typeB);
+    };
+
+    std::vector<valtype> vSolutions;
     txnouttype whichType;
     if (!Solver(scriptPubKey, whichType, vSolutions))
-        return false;
+    {
+        if (keystore.HaveWatchOnly(scriptPubKey))
+            return ISMINE_WATCH_UNSOLVABLE;
+        return ISMINE_NO;
+    }
 
     CKeyID keyID;
     switch (whichType)
     {
-    case TX_NONSTANDARD:
-    case TX_NULL_DATA:
-        return false;
-    case TX_PUBKEY:
-        keyID = CPubKey(vSolutions[0]).GetID();
-        return wallet.HaveKey(keyID);
-    case TX_PUBKEYHASH:
-        keyID = CKeyID(uint160(vSolutions[0]));
-        return wallet.HaveKey(keyID);
-    case TX_SCRIPTHASH:
-    {
-        CScript subscript;
-        if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
-            return false;
-        return IsMine(wallet, subscript);
+        case TX_NONSTANDARD:
+        case TX_NULL_DATA:
+            break;
+        case TX_PUBKEY:
+            keyID = CPubKey(vSolutions[0]).GetID();
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_PUBKEYHASH:
+            keyID = CKeyID(uint160(vSolutions[0]));
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_SCRIPT_HASH:
+        {
+            CScript subscript;
+            if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
+                return false;
+            return IsMine(*this, subscript);
+        }
+        case TX_MULTISIG:
+        {
+            std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
+            if (HaveKeys(keys, keystore) == keys.size())
+                return ISMINE_SPENDABLE;
+            break;
+        }
+        default:
+            break;
+
     }
-    case TX_MULTISIG:
-    {
-        // Only consider transactions "mine" if we own ALL the
-        // keys involved. multi-signature transactions that are
-        // partially owned (somebody else has a key that can spend
-        // them) enable spend-out-from-under-you attacks, especially
-        // in shared-wallet situations.
-        std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
-        return HaveKeys(keys, wallet) == keys.size();
-    }
-    }
-    return false;
+
+    // Produce sig
+
+    return ISMINE_NO;
 }
 
+isminetype CWallet::IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid)
+{
+    if (HasIsCoinstakeOp(scriptPubKey))
+    {
+        CScript scriptA, scriptB;
+        if (!SplitConditionalCoinstakeScript(scriptPubKey, scriptA, scriptB))
+            return ISMINE_NO;
+
+        isminetype typeB = IsMine(scriptB, keyID, isInvalid);
+        if (typeB & ISMINE_SPENDABLE)
+            return typeB;
+
+        isminetype typeA = IsMine(scriptA, keyID, isInvalid);
+
+        if (typeA & ISMINE_SPENDABLE) {
+            int ia = (int) typeA;
+            ia &= ~ISMINE_SPENDABLE;
+            ia |= ISMINE_WATCH_COLDSTAKE;
+            typeA = (isminetype) ia;
+        };
+
+        return (isminetype) ((int) typeA | (int) typeB);
+    };
+
+    std::vector<valtype> vSolutions;
+    txnouttype whichType;
+    if (!Solver(scriptPubKey, whichType, vSolutions))
+    {
+        if (keystore.HaveWatchOnly(scriptPubKey))
+            return ISMINE_WATCH_UNSOLVABLE;
+        return ISMINE_NO;
+    }
+
+    CKeyID keyID;
+    switch (whichType)
+    {
+        case TX_NONSTANDARD:
+        case TX_NULL_DATA:
+            break;
+        case TX_PUBKEY:
+            keyID = CPubKey(vSolutions[0]).GetID();
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_PUBKEYHASH:
+            keyID = CKeyID(uint160(vSolutions[0]));
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_SCRIPT_HASH:
+        {
+            CScript subscript;
+            if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
+                return false;
+            isminetype ret = IsMine(keystore, subscript, isInvalid);
+            if (ret == ISMINE_SPENDABLE || ret = ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
+                return ret;
+            break;
+        }
+        case TX_MULTISIG:
+        {
+            std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
+            if (HaveKeys(keys, keystore) == keys.size())
+                return ISMINE_SPENDABLE;
+            break;
+        }
+        default:
+            break;
+
+    }
+
+    // Produce sig
+
+    return ISMINE_NO;
+}

@@ -161,7 +161,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
                 };
             };
 
-            if (wallet->IsMine(txout))
+            if ((wallet->IsMine(txout)) & ISMINE_SPENDABLE)
             {
                 TransactionRecord sub(hash, nTime);
                 sub.idx = parts.size(); // sequence number
@@ -228,7 +228,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
                 continue;
             };
 
-            if (wallet->IsMine(txin))
+            if ((wallet->IsMine(txin)) & ISMINE_SPENDABLE)
                 continue;
             fAllFromMe = false;
             break;
@@ -248,7 +248,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
             if (txout.scriptPubKey.GetOp(pc, firstOpCode)
                 && firstOpCode == OP_RETURN)
                 continue;
-            if (wallet->IsMine(txout))
+            if ((wallet->IsMine(txout)) & ISMINE_SPENDABLE)
                 continue;
 
             fAllToMe = false;
@@ -309,7 +309,7 @@ QList<TransactionRecord> TransactionRecord::decomposeTransaction(const CWallet *
                         && firstOpCode == OP_RETURN)
                         continue;
 
-                    if (wallet->IsMine(txout))
+                    if ((wallet->IsMine(txout)) & ISMINE_SPENDABLE)
                     {
                         // Ignore parts sent to self, as this is usually the change
                         // from a transaction sent back to our own address.
