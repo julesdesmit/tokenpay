@@ -2470,3 +2470,115 @@ bool SplitConditionalCoinstakeScript(const CScript &scriptIn, CScript &scriptOut
 
     return false;
 };
+
+unsigned int HaveKeys(const std::vector<valtype>& pubkeys, const CKeyStore& keystore)
+{
+    unsigned int nResult = 0;
+    for (const valtype& pubkey : pubkeys)
+    {
+        CKeyID keyID = CPubKey(pubkey).GetID();
+        if (keystore.HaveKey(keyID))
+            ++nResult;
+    }
+    return nResult;
+}
+
+isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, SigVersion sigversion)
+{
+    bool isInvalid = false;
+    return IsMine(keystore, scriptPubKey, isInvalid, sigversion);
+}
+
+isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest, SigVersion sigversion)
+{
+    bool isInvalid = false;
+    return IsMine(keystore, dest, isInvalid, sigversion);
+}
+
+isminetype IsMine(const CKeyStore &keystore, const CTxDestination& dest, bool& isInvalid, SigVersion sigversion)
+{
+    if (dest.type() == typeid(CStealthAddress))
+    {
+        const CStealthAddress &sxAddr = boost::get<CStealthAddress>(dest);
+        return sxAddr.scan_secret.size() == EC_SECRET_SIZE ? ISMINE_SPENDABLE : ISMINE_NO; // TODO: watch only?
+    };
+
+    CScript script = GetScriptForDestination(dest);
+    return IsMine(keystore, script, isInvalid, sigversion);
+}
+
+isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey, bool& isInvalid)
+{
+    if (HasIsCoinstakeOp(scriptPubKey))
+    {
+        CScript scriptA, scriptB;
+        if (!SplitConditionalCoinstakeScript(scriptPubKey, scriptA, scriptB))
+            return ISMINE_NO;
+
+        isminetype typeB = IsMine(keystore, scriptB, isInvalid, sigversion);
+        if (typeB & ISMINE_SPENDABLE)
+            return typeB;
+
+        isminetype typeA = IsMine(keystore, scriptA, isInvalid, sigversion);
+        if (typeA & ISMINE_SPENDABLE)
+        {
+            int ia = (int)typeA;
+            ia &= ~ISMINE_SPENDABLE;
+            ia |= ISMINE_WATCH_COLDSTAKE;
+            typeA = (isminetype)ia;
+        };
+
+        return (isminetype)((int)typeA | (int)typeB);
+    }
+
+    std::vector<valtype> vSolutions;
+    txnouttype whichType;
+    if (!Solver(scriptPubKey, whichType, vSolutions))
+    {
+        if (keystore.HaveWatchOnly(scriptPubKey))
+            return ISMINE_WATCH_UNSOLVABLE;
+        return ISMINE_NO;
+    }
+
+    CKeyID keyID;
+    switch (whichType)
+    {
+        case TX_NONSTANDARD:
+        case TX_NULL_DATA:
+            break;
+        case TX_PUBKEY:
+            keyID = CPubKey(vSolutions[0]).GetID();
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_PUBKEYHASH:
+            keyID = CKeyID(uint160(vSolutions[0]));
+            if (keystore.HaveKey(keyID))
+                return ISMINE_SPENDABLE;
+            break;
+        case TX_SCRIPT_HASH:
+        {
+            CScript subscript;
+            if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
+                return false;
+            isminetype ret = IsMine(keystore, subscript, isInvalid);
+            if (ret == ISMINE_SPENDABLE || ret = ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
+                return ret;
+            break;
+        }
+        case TX_MULTISIG:
+        {
+            std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
+            if (HaveKeys(keys, keystore) == keys.size())
+                return ISMINE_SPENDABLE;
+            break;
+        }
+        default:
+            break;
+
+    }
+
+    // Produce sig
+
+    return ISMINE_NO;
+}

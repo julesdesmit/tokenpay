@@ -759,4 +759,22 @@ CScript GetScriptForDestination(const CTxDestination& dest);
 
 CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey>& keys);
 
+enum isminetype
+{
+    ISMINE_NO = 0,
+    ISMINE_WATCH_UNSOLVABLE = 1,
+    ISMINE_WATCH_SOLVABLE = 2,
+    ISMINE_WATCH_COLDSTAKE = (1 << 7),
+    ISMINE_WATCH_ONLY = ISMINE_WATCH_SOLVABLE | ISMINE_WATCH_UNSOLVABLE | ISMINE_WATCH_COLDSTAKE,
+    ISMINE_SPENDABLE = 4,
+    ISMINE_ALL = ISMINE_WATCH_ONLY | ISMINE_SPENDABLE
+};
+
+typedef uint8_t isminefilter;
+
+isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey, bool& isInvalid);
+isminetype IsMine(const CKeyStore& keystore, const CScript& scriptPubKey);
+isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest, bool& isInvalid);
+isminetype IsMine(const CKeyStore& keystore, const CTxDestination& dest);
+
 #endif
