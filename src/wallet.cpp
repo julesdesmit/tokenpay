@@ -1568,7 +1568,7 @@ int64_t CWallet::GetStakeableBalance() const
             if (pcoin->IsTrusted())
             {
                 nTotal += pcoin->GetAvailableCredit();
-                nTtoal += pcoin->GetAvailableWatchOnlyCredit();
+                nTotal += pcoin->GetAvailableWatchOnlyCredit();
             }
         };
     }
