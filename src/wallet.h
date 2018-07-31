@@ -311,7 +311,7 @@ public:
     std::map<CTxDestination, int64_t> GetAddressBalances();
 
     isminetype IsMine(const CTxIn& txin) const;
-    int64_t GetDebit(const CTxIn& txin) const;
+    int64_t GetDebit(const CTxIn& txin, const isminefilter& filter) const;
     int64_t GetTokenPayDebit(const CTxIn& txin) const;
     int64_t GetTokenPayCredit(const CTxOut& txout) const;
     
@@ -355,7 +355,7 @@ public:
                 nDebit += GetTokenPayDebit(txin);
             } else
             {
-                nDebit += GetDebit(txin);
+                nDebit += GetDebit(txin, ISMINE_ALL);
             };
             
             if (!MoneyRange(nDebit))
@@ -822,7 +822,7 @@ public:
             return 0;
         if (fDebitCached)
             return nDebitCached;
-        nDebitCached = pwallet->GetDebit(*this);
+        nDebitCached = pwallet->GetDebit(*this, ISMINE_ALL);
         fDebitCached = true;
         return nDebitCached;
     }
