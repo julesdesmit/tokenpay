@@ -339,12 +339,12 @@ public:
                 return true;
         return false;
     }
-    bool IsFromMe(const CTransaction& tx) const
+    bool IsFromMe(const CTransaction& tx, const isminefilter& filter) const
     {
-        return (GetDebit(tx) > 0);
+        return (GetDebit(tx, filter) > 0);
     }
     
-    int64_t GetDebit(const CTransaction& tx) const
+    int64_t GetDebit(const CTransaction& tx, const isminefilter& filter) const
     {
         int64_t nDebit = 0;
         BOOST_FOREACH(const CTxIn& txin, tx.vin)
@@ -355,7 +355,7 @@ public:
                 nDebit += GetTokenPayDebit(txin);
             } else
             {
-                nDebit += GetDebit(txin, ISMINE_ALL);
+                nDebit += GetDebit(txin, filter);
             };
             
             if (!MoneyRange(nDebit))
@@ -816,13 +816,13 @@ public:
         return (!!vfSpent[nOut]);
     }
 
-    int64_t GetDebit() const
+    int64_t GetDebit(const isminefilter& filter) const
     {
         if (vin.empty())
             return 0;
         if (fDebitCached)
             return nDebitCached;
-        nDebitCached = pwallet->GetDebit(*this, ISMINE_ALL);
+        nDebitCached = pwallet->GetDebit(*this, filter);
         fDebitCached = true;
         return nDebitCached;
     }
@@ -965,14 +965,14 @@ public:
     }
 
     void GetAmounts(std::list<std::pair<CTxDestination, int64_t> >& listReceived,
-                    std::list<std::pair<CTxDestination, int64_t> >& listSent, int64_t& nFee, std::string& strSentAccount) const;
+                    std::list<std::pair<CTxDestination, int64_t> >& listSent, int64_t& nFee, std::string& strSentAccount, const isminefilter& filter) const;
 
     void GetAccountAmounts(const std::string& strAccount, int64_t& nReceived,
                            int64_t& nSent, int64_t& nFee) const;
 
-    bool IsFromMe() const
+    bool IsFromMe(const isminefilter& filter) const
     {
-        return (GetDebit() > 0);
+        return (GetDebit(filter) > 0);
     }
 
     bool IsTrusted() const

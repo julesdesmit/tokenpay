@@ -119,7 +119,7 @@ void UnregisterWallet(CWallet* pwalletIn)
 bool static IsFromMe(CTransaction& tx)
 {
     BOOST_FOREACH(CWallet* pwallet, setpwalletRegistered)
-        if (pwallet->IsFromMe(tx))
+        if (pwallet->IsFromMe(tx, ISMINE_SPENDABLE))
             return true;
     return false;
 }
@@ -150,7 +150,7 @@ void SyncWithWallets(const CTransaction& tx, const CBlock* pblock, bool fUpdate,
         {
             BOOST_FOREACH(CWallet* pwallet, setpwalletRegistered)
             {
-                if (pwallet->IsFromMe(tx))
+                if (pwallet->IsFromMe(tx, ISMINE_ALL))
                     pwallet->DisableTransaction(tx);
             };
         };
@@ -177,7 +177,7 @@ void SyncWithWalletsThin(const CTransaction& tx, const uint256& blockhash, bool 
         {
             BOOST_FOREACH(CWallet* pwallet, setpwalletRegistered)
             {
-                if (pwallet->IsFromMe(tx))
+                if (pwallet->IsFromMe(tx, ISMINE_ALL))
                     pwallet->DisableTransaction(tx);
             };
         };
@@ -1040,7 +1040,7 @@ bool AcceptToMemoryPool(CTxMemPool &pool, CTransaction &tx, CTxDB &txdb, bool *p
                 nLastTime = nNow;
                 // -limitfreerelay unit is thousand-bytes-per-minute
                 // At default rate it would take over a month to fill 1GB
-                if (dFreeCount > GetArg("-limitfreerelay", 15)*10*1000 && !IsFromMe(tx))
+                if (dFreeCount > GetArg("-limitfreerelay", 15)*10*1000 && !IsFromMe(tx, ISMINE_SPENDABLE))
                     return error("AcceptToMemoryPool() : free transaction rejected by rate limiter");
                 if (fDebug)
                     LogPrintf("Rate limit dFreeCount: %g => %g\n", dFreeCount, dFreeCount+nSize);

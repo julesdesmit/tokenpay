@@ -892,7 +892,7 @@ bool CWallet::AddToWalletIfInvolvingMe(const CTransaction& tx, const uint256& ha
             };
         }
 
-        if (fExisted || fIsMine || IsMine(tx) || IsFromMe(tx))
+        if (fExisted || fIsMine || IsMine(tx) || IsFromMe(tx, ISMINE_SPENDABLE))
         {
             CWalletTx wtx(this, tx);
 
@@ -1104,7 +1104,8 @@ int CWalletTx::GetRequestCount() const
 }
 
 void CWalletTx::GetAmounts(list<pair<CTxDestination, int64_t> >& listReceived,
-                           list<pair<CTxDestination, int64_t> >& listSent, int64_t& nFee, string& strSentAccount) const
+                           list<pair<CTxDestination, int64_t> >& listSent, int64_t& nFee, string& strSentAccount,
+                           const isminefilter& filter) const
 {
     nFee = 0;
     listReceived.clear();
@@ -1158,7 +1159,7 @@ void CWalletTx::GetAmounts(list<pair<CTxDestination, int64_t> >& listReceived,
             continue;
 
 
-        bool fIsMine;
+        isminetype fIsMine = pwallet->IsMine(txout);
         // Only need to handle txouts if AT LEAST one of these is true:
         //   1) they debit from us (sent)
         //   2) the output is to us (received)
@@ -1167,9 +1168,8 @@ void CWalletTx::GetAmounts(list<pair<CTxDestination, int64_t> >& listReceived,
             // Don't report 'change' txouts
             if (pwallet->IsChange(txout))
                 continue;
-            fIsMine = (pwallet->IsMine(txout) & ISMINE_ALL);
         } else
-        if (!((fIsMine = pwallet->IsMine(txout)) & ISMINE_ALL))
+        if (!(fIsMine & filter))
             continue;
 
         // In either case, we need to get the destination address
@@ -1186,7 +1186,7 @@ void CWalletTx::GetAmounts(list<pair<CTxDestination, int64_t> >& listReceived,
             listSent.push_back(make_pair(address, txout.nValue));
 
         // If we are receiving the output, add it as a "received" entry
-        if (fIsMine)
+        if (fIsMine & filter)
             listReceived.push_back(make_pair(address, txout.nValue));
     };
 
@@ -1201,7 +1201,7 @@ void CWalletTx::GetAccountAmounts(const std::string& strAccount, int64_t& nRecei
     std::string strSentAccount;
     std::list<std::pair<CTxDestination, int64_t> > listReceived;
     std::list<std::pair<CTxDestination, int64_t> > listSent;
-    GetAmounts(listReceived, listSent, allFee, strSentAccount);
+    GetAmounts(listReceived, listSent, allFee, strSentAccount, ISMINE_ALL);
 
     if (strAccount == strSentAccount)
     {
@@ -1797,7 +1797,7 @@ bool CWallet::SelectCoinsMinConf(int64_t nTargetValue, unsigned int nSpendTime, 
     {
         const CWalletTx *pcoin = output.tx;
 
-        if (output.nDepth < (pcoin->IsFromMe() ? nConfMine : nConfTheirs))
+        if (output.nDepth < (pcoin->IsFromMe(ISMINE_SPENDABLE) ? nConfMine : nConfTheirs))
             continue;
 
         int i = output.i;
@@ -6725,7 +6725,7 @@ std::map<CTxDestination, int64_t> CWallet::GetAddressBalances()
                 continue;
 
             int nDepth = pcoin->GetDepthInMainChain();
-            if (nDepth < (pcoin->IsFromMe() ? 0 : 1))
+            if (nDepth < (pcoin->IsFromMe(ISMINE_ALL) ? 0 : 1))
                 continue;
 
             for (unsigned int i = 0; i < pcoin->vout.size(); i++)
@@ -6893,7 +6893,7 @@ void CWallet::FixSpentCoins(int& nMismatchFound, int64_t& nBalanceInQuestion, bo
 // ppcoin: disable transaction (only for coinstake)
 void CWallet::DisableTransaction(const CTransaction &tx)
 {
-    if (!tx.IsCoinStake() || !IsFromMe(tx))
+    if (!tx.IsCoinStake() || (!IsFromMe(tx) & ISMINE_ALL))
         return; // only disconnecting coinstake requires marking input unspent
 
     LOCK(cs_wallet);

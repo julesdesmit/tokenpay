@@ -713,7 +713,7 @@ Value getbalance(const Array& params, bool fHelp)
             std::string strSentAccount;
             std::list<std::pair<CTxDestination, int64_t> > listReceived;
             std::list<std::pair<CTxDestination, int64_t> > listSent;
-            wtx.GetAmounts(listReceived, listSent, allFee, strSentAccount);
+            wtx.GetAmounts(listReceived, listSent, allFee, strSentAccount, ISMINE_ALL);
             if (wtx.GetDepthInMainChain() >= nMinDepth && wtx.GetBlocksToMaturity() == 0)
             {
                 BOOST_FOREACH(const PAIRTYPE(CTxDestination,int64_t)& r, listReceived)
@@ -1194,14 +1194,14 @@ static void MaybePushAddress(Object & entry, const CTxDestination &dest)
         entry.push_back(Pair("address", addr.ToString()));
 }
 
-void ListTransactions(const CWalletTx& wtx, const std::string& strAccount, int nMinDepth, bool fLong, Array& ret)
+void ListTransactions(const CWalletTx& wtx, const std::string& strAccount, int nMinDepth, bool fLong, Array& ret, const isminefilter& filter)
 {
     int64_t nFee;
     std::string strSentAccount;
     std::list<std::pair<CTxDestination, int64_t> > listReceived;
     std::list<std::pair<CTxDestination, int64_t> > listSent;
 
-    wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount);
+    wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount, filter);
 
     bool fAllAccounts = (strAccount == std::string("*"));
 
@@ -1291,10 +1291,10 @@ Value listtransactions(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 4)
         throw std::runtime_error(
-            "listtransactions [account] [count=10] [from=0] [show_coinstake=1]\n"
+            "listtransactions [account] [count=10] [from=0] [show_coinstake=1] [show_watchonly=0]\n"
             "Returns up to [count] most recent transactions skipping the first [from] transactions for account [account].");
 
-    // listtransactions "*" 20 0 0
+    // listtransactions "*" 20 0 0 0
     std::string strAccount = "*";
     if (params.size() > 0)
         strAccount = params[0].get_str();
@@ -1313,6 +1313,14 @@ Value listtransactions(const Array& params, bool fHelp)
             fShowCoinstake = false;
     };
 
+    isminefilter filter = ISMINE_SPENDABLE;
+    if (params.size() > 4)
+    {
+        std::string value = params[4].get_str();
+        if (IsStringBoolPositive(value))
+            filter = ISMINE_ALL;
+    }
+
     if (nCount < 0)
         throw JSONRPCError(RPC_INVALID_PARAMETER, "Negative count");
     if (nFrom < 0)
@@ -1329,7 +1337,7 @@ Value listtransactions(const Array& params, bool fHelp)
         CWalletTx *const pwtx = (*it).second.first;
 
         if (pwtx != 0)
-            ListTransactions(*pwtx, strAccount, 0, true, ret);
+            ListTransactions(*pwtx, strAccount, 0, true, ret, filter);
         CAccountingEntry *const pacentry = (*it).second.second;
 
         if (pacentry != 0)
@@ -1387,7 +1395,7 @@ Value listaccounts(const Array& params, bool fHelp)
         if (nDepth < 0)
             continue;
 
-        wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount);
+        wtx.GetAmounts(listReceived, listSent, nFee, strSentAccount, ISMINE_ALL);
         mapAccountBalances[strSentAccount] -= nFee;
 
         BOOST_FOREACH(const PAIRTYPE(CTxDestination, int64_t)& s, listSent)
@@ -1451,7 +1459,7 @@ Value listsinceblock(const Array& params, bool fHelp)
         CWalletTx tx = (*it).second;
 
         if (depth == -1 || tx.GetDepthInMainChain() < depth)
-            ListTransactions(tx, "*", 0, true, transactions);
+            ListTransactions(tx, "*", 0, true, transactions, ISMINE_ALL);
     };
 
     uint256 lastblock;
@@ -1499,16 +1507,16 @@ Value gettransaction(const Array& params, bool fHelp)
         int64_t nCredit = wtx.GetCredit();
         int64_t nDebit = wtx.GetDebit();
         int64_t nNet = nCredit - nDebit;
-        int64_t nFee = (wtx.IsFromMe() ? wtx.GetValueOut() - nDebit : 0);
+        int64_t nFee = (wtx.IsFromMe(ISMINE_SPENDABLE) ? wtx.GetValueOut() - nDebit : 0);
 
         entry.push_back(Pair("amount", ValueFromAmount(nNet - nFee)));
-        if (wtx.IsFromMe())
+        if (wtx.IsFromMe(ISMINE_SPENDABLE))
             entry.push_back(Pair("fee", ValueFromAmount(nFee)));
 
         WalletTxToJSON(wtx, entry);
 
         Array details;
-        ListTransactions(pwalletMain->mapWallet[hash], "*", 0, false, details);
+        ListTransactions(pwalletMain->mapWallet[hash], "*", 0, false, details, ISMINE_ALL);
         entry.push_back(Pair("details", details));
     } else
     {
