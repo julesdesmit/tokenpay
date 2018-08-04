@@ -2596,7 +2596,5 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey, bool& 
 
     }
 
-    // Produce sig
-
     return ISMINE_NO;
 }

@@ -9264,7 +9264,5 @@ isminetype CWallet::IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isI
 
     }
 
-    // Produce sig
-
     return ISMINE_NO;
 }

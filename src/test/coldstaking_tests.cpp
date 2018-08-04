@@ -78,7 +78,6 @@ BOOST_AUTO_TEST_CASE(opiscoinstake_test)
 
 
     CAmount nValue = 100000;
-    // SignatureData sigdataA, sigdataB, sigdataC;
 
     CTransaction txn;
     txn.nLockTime = 0;
@@ -102,20 +101,8 @@ BOOST_AUTO_TEST_CASE(opiscoinstake_test)
 
 
 
-    // BOOST_CHECK(ProduceSignature(TransactionSignatureCreator(&keystoreA, &txnConst, 0, vchAmount, SIGHASH_ALL), script, sigdataA));
-    // BOOST_CHECK(!ProduceSignature(TransactionSignatureCreator(&keystoreB, &txnConst, 0, vchAmount, SIGHASH_ALL), script, sigdataB));
-
-
-    ScriptError serror = SCRIPT_ERR_OK;
-    int nFlags = STANDARD_SCRIPT_VERIFY_FLAGS;
-    CScript scriptSig;
-    BOOST_CHECK(VerifyScript(scriptSig, script, &sigdataA.scriptWitness, nFlags, TransactionSignatureChecker(&txnConst, 0, vchAmount), &serror));
-
-
-    // BOOST_CHECK(!ProduceSignature(TransactionSignatureCreator(&keystoreA, &txnConst2, 0, vchAmount, SIGHASH_ALL), script, sigdataC));
-    // BOOST_CHECK(ProduceSignature(TransactionSignatureCreator(&keystoreB, &txnConst2, 0, vchAmount, SIGHASH_ALL), script, sigdataB));
-
-    BOOST_CHECK(VerifyScript(scriptSig, script, &sigdataB.scriptWitness, nFlags, TransactionSignatureChecker(&txnConst2, 0, vchAmount), &serror));
+    BOOST_CHECK(SignSignature(&keystoreA, script, txn, 1, SIGHASH_ALL));
+    BOOST_CHECK(!SignSignature(&keystoreB, script, txn, 1, SIGHASH_ALL));
 
 }
 
