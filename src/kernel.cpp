@@ -767,15 +767,14 @@ bool CheckProofOfStake(CBlockIndex* pindexPrev, const CTransaction& tx, unsigned
         return tx.DoS(1, error("CheckProofOfStake() : INFO: check kernel failed on coinstake %s, hashProof=%s", tx.GetHash().ToString().c_str(), hashProofOfStake.ToString().c_str())); // may occur during initial download or if behind on block chain sync
 
     // Make sure the output assigns at least the same value as the inputs to outputs with scripts matching the prevout script.
-    uint64_t amount;
-    for (const auto &intx : tx.vin)
-    {
-        amount += intx->nValue;
-    }
-
     const CTxOut& txoutCheck = tx.vout[0];
     if (HasIsCoinstakeOp(txoutCheck.scriptPubKey))
     {
+        uint64_t amount;
+        for (const auto &intx : tx.vin)
+        {
+            amount += intx->nValue;
+        }
         uint64_t nVerify = 0;
 
         for (const auto &txout : tx.vout)
