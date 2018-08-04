@@ -1843,8 +1843,26 @@ bool SignSignature(const CKeyStore &keystore, const CScript& fromPubKey, CTransa
     uint256 hash = SignatureHash(fromPubKey, txTo, nIn, nHashType);
 
     txnouttype whichType;
-    if (!Solver(keystore, fromPubKey, hash, nHashType, txin.scriptSig, whichType))
-        return false;
+    if (HasIsCoinstakeOp(fromPubKey))
+    {
+        CScript scriptPath;
+        if (txTo.IsCoinStake())
+        {
+            if (!GetCoinstakeScriptPath(fromPubKey, scriptPath))
+                return false;
+        } else
+        {
+            if (!GetNonCoinstakeScriptPath(fromPubKey, scriptPath))
+                return false;
+        }
+
+        if (!Solver(keystore, scriptPath, hash, nHashType, txin.scriptSig, whichType))
+            return false;
+    } else
+    {
+        if (!Solver(keystore, fromPubKey, hash, nHashType, txin.scriptSig, whichType))
+            return false;
+    }
 
     if (whichType == TX_SCRIPTHASH)
     {
