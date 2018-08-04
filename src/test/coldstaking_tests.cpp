@@ -41,16 +41,7 @@ BOOST_AUTO_TEST_CASE(opiscoinstake_test)
 
     BOOST_CHECK(HasIsCoinstakeOp(script));
 
-    BOOST_CHECK(!IsSpendScriptP2PKH(script));
-
-
-    CScript scriptFail1 = CScript()
-    << OP_ISCOINSTAKE << OP_IF
-    << OP_DUP << OP_HASH160 << ToByteVector(idA) << OP_EQUALVERIFY << OP_CHECKSIG
-    << OP_ELSE
-    << OP_DUP << OP_HASH160 << ToByteVector(idA) << OP_EQUALVERIFY << OP_CHECKSIG
-    << OP_ENDIF;
-    BOOST_CHECK(IsSpendScriptP2PKH(scriptFail1));
+    BOOST_CHECK(IsSpendScriptP2PKH(script));
 
 
     CScript scriptTest, scriptTestB;
@@ -70,7 +61,6 @@ BOOST_AUTO_TEST_CASE(opiscoinstake_test)
     txnouttype whichType;
 
     BOOST_CHECK(IsStandard(script, whichType));
-
 
 
     BOOST_CHECK(IsMine(keystoreB, script) & ISMINE_ALL);
@@ -93,7 +83,7 @@ BOOST_AUTO_TEST_CASE(opiscoinstake_test)
     out0->nValue = nValue;
     out0->scriptPubKey = script;
     txn.vout.push_back(out0);
-    txn.vin.push_back(CTxIn(COutPoint(uint256S("d496208ea84193e0c5ed05ac708aec84dfd2474b529a7608b836e282958dc72b"), 0))); // Check this hash
+    txn.vin.push_back(CTxIn(COutPoint(uint256("0a2d4ac9cc16ab3d88ddcb53b368cfd866692d05ccdf79da4ad94efcf471e254"), 0))); // Genesis tx
     BOOST_CHECK(txn.IsCoinStake());
 
     std::vector<uint8_t> vchAmount(8);
