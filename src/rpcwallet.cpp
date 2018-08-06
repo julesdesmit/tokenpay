@@ -1505,7 +1505,7 @@ Value gettransaction(const Array& params, bool fHelp)
         TxToJSON(wtx, 0, entry);
 
         int64_t nCredit = wtx.GetCredit();
-        int64_t nDebit = wtx.GetDebit();
+        int64_t nDebit = wtx.GetDebit(ISMINE_SPENDABLE);
         int64_t nNet = nCredit - nDebit;
         int64_t nFee = (wtx.IsFromMe(ISMINE_SPENDABLE) ? wtx.GetValueOut() - nDebit : 0);
 
@@ -3219,113 +3219,55 @@ Value txnreport(const Array& params, bool fHelp)
     return result;
 }
 
-Value walletsettings(const Array &request, bool fHelp)
+Value coldstakingaddress(const Array &request, bool fHelp)
 {
+    EnsureWalletIsUnlocked();
 
-    if (!EnsureWalletIsAvailable(pwalletMain, fHelp))
-        throw JSONRPCError(RPC_WALLET_ERROR, "Wallet unavailable");
-
-    if (fHelp || request.size() < 1 || request.size() > 2)
+    if (fHelp || request.size() < 1)
         throw std::runtime_error(
-                "walletsettings \"[setting]\" [value]\n"
-                "\nManage wallet settings.\n"
-                + HelpRequiringPassphrase() +
-                "\nArguments:\n"
-                "1. \"setting\"                    (string, required) Settings group to modify.\n"
-                "2. \"value\"                      (json, optional) Settings.\n"
-                "\"changeaddress\"\n"
-                "  \"address_standard\"          (string, optional, default=none) Change address for standard inputs.\n"
-                "  \"coldstakingaddress\"        (string, optional, default=none) Cold staking address for standard inputs.\n"
-                "\n"
-                "Omit the json object to print the settings group.\n"
-                "Pass an empty json object to clear the settings group.\n"
-                "\nExamples\n"
-                "Set coldstaking changeaddress extended public key:\n"
-                "walletsettings changeaddress coldstakingaddress [extpubkey]\n"
-                                                                                                                         "Clear changeaddress settings\n"
-                "walletsettings changeaddress \"\"\n"
+                "coldstakingaddress [extpubkey]"
+                "\nChange address to send cold staking outputs to. To clear, simply write coldstakingaddress clear.\n"
         );
 
     Object result;
 
     std::string sSetting = request[0].get_str();
 
-    if (sSetting == "changeaddress")
+    if (sSetting == "clear")
     {
-        Value jsonValue;
-        Array warnings;
-
-        if (request.size() == 1)
+        CBitcoinAddress addr;
+        if (pwalletMain->GetCSAddress("coldstakingaddress", addr))
         {
-            if (!pwalletMain->GetSetting("changeaddress", jsonValue))
-            {
-                result.push_back(Pair(sSetting, "default"));
-            } else
-            {
-                Object& json = jsonValue.get_obj();
-                result.push_back(Pair(sSetting, json));
-            };
-            return result;
-        } else
-        {
-            if (request.size() == 2)
-            {
-                if (!pwalletMain->EraseSetting(sSetting))
-                    throw JSONRPCError(RPC_WALLET_ERROR, _("EraseSetting failed."));
-                result.push_back(Pair(sSetting, "cleared"));
-                return result;
-            }
-
-            Object json;
-            json.push_back(Pair(request[1], request[2]));
-            if (request[1] == "address_standard")
-            {
-
-                std::string sAddress = request[2].get_str();
-                CBitcoinAddress addr(sAddress);
-                if (!addr.IsValid())
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid address_standard.");
-            } else
-            if (request[1] == "coldstakingaddress")
-            {
-                if (request.size() == 2)
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("No coldstakingaddress given."));
-
-                std::string sAddress = request[2].get_str();
-                CBitcoinAddress addr(sAddress);
-                if (!addr.IsValid())
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
-                if (IsStealthAddress(sAddress))
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
-
-                CKeyID addrKey;
-                addr.GetKeyID(addrKey);
-                if (pwalletMain->HaveKey(addrKey))
-                    throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
-
-                // This will need to be refactored appropriately for the codebase if this requires a hardfork.
-                //
-                // const Consensus::Params& consensusParams = Params().GetConsensus();
-                // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
-                //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
-            } else
-            {
-                warnings.push_back("Unknown key " + name);
-            };
-
-            Value sJson;
-            sJson.read(json);
-            if (!pwalletMain->SetSetting(sSetting, sJson))
-                throw JSONRPCError(RPC_WALLET_ERROR, _("SetSetting failed."));
-
-            if (warnings.size() > 0)
-                result.push_back(Pair("warnings", warnings));
+            pwalletMain->EraseCSAddress("coldstakingaddress");
+            result.push_back(Pair("coldstakingaddress", "default"));
         }
-        result.push_back(Pair(sSetting, json));
     } else
     {
-        throw JSONRPCError(RPC_INVALID_PARAMETER, _("Unknown setting"));
-    };
+        CBitcoinAddress addr(sSetting);
+        if (!addr.IsValid())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, _("Invalid coldstakingaddress."));
+        if (IsStealthAddress(sSetting))
+            throw JSONRPCError(RPC_INVALID_PARAMETER, _("coldstakingaddress can't be a stealthaddress."));
+
+        CKeyID addrKey;
+        addr.GetKeyID(addrKey);
+        if (pwalletMain->HaveKey(addrKey))
+            throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
+
+        // This will need to be refactored appropriately for the codebase if this requires a hardfork.
+        //
+        // const Consensus::Params& consensusParams = Params().GetConsensus();
+        // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
+        //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
+
+        if (!pwalletMain->SetCSAddress("coldstakingaddress", addr))
+            throw JSONRPCError(RPC_WALLET_ERROR, _("SetCSAddress failed."));
+
+        if (warnings.size() > 0)
+            result.push_back(Pair("warnings", warnings));
+
+        result.push_back(Pair("coldstakingaddress", sSetting));
+    }
 
     return result;
 };

@@ -2533,11 +2533,11 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey, bool& 
         if (!SplitConditionalCoinstakeScript(scriptPubKey, scriptA, scriptB))
             return ISMINE_NO;
 
-        isminetype typeB = IsMine(keystore, scriptB, isInvalid, sigversion);
+        isminetype typeB = IsMine(keystore, scriptB, isInvalid);
         if (typeB & ISMINE_SPENDABLE)
             return typeB;
 
-        isminetype typeA = IsMine(keystore, scriptA, isInvalid, sigversion);
+        isminetype typeA = IsMine(keystore, scriptA, isInvalid);
         if (typeA & ISMINE_SPENDABLE)
         {
             int ia = (int)typeA;
@@ -2574,13 +2574,13 @@ isminetype IsMine(const CKeyStore &keystore, const CScript& scriptPubKey, bool& 
             if (keystore.HaveKey(keyID))
                 return ISMINE_SPENDABLE;
             break;
-        case TX_SCRIPT_HASH:
+        case TX_SCRIPTHASH:
         {
             CScript subscript;
-            if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
-                return false;
+            if (!keystore.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
+                break;
             isminetype ret = IsMine(keystore, subscript, isInvalid);
-            if (ret == ISMINE_SPENDABLE || ret = ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
+            if (ret == ISMINE_SPENDABLE || ret == ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
                 return ret;
             break;
         }

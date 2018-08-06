@@ -171,7 +171,8 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "checkkernel", 0 },
     { "checkkernel", 1 },
     { "submitblock", 1 },
-    { "walletsettings", 1 },
+    { "coldstakingaddress", 0 },
+    { "coldstakingaddress", 1 },
 };
 
 class CRPCConvertTable

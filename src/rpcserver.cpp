@@ -393,7 +393,7 @@ static const CRPCCommand vRPCCommands[] =
     { "bip32",                  &extkey,                 false,     false,     true  },
     { "mnemonic",               &mnemonic,               false,     false,     false },
     { "bip39",                  &mnemonic,               false,     false,     false },
-    { "walletsettings",         &walletsettings,         false,     false,     false },
+    { "coldstakingaddress",     &coldstakingaddress,     false,     false,     false },
 };
 
 CRPCTable::CRPCTable()

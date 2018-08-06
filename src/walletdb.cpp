@@ -20,21 +20,21 @@ extern bool fWalletUnlockStakingOnly;
 
 
 
-bool CWalletDB::ReadWalletSetting(const std::string& setting, std::string& json)
+bool CWalletDB::ReadCSAddress(const std::string& setting, CBitcoinAddress& address)
 {
-    return Read(make_pair(std::string("wset"), setting), json);
+    return Read(make_pair(std::string("csaddr"), setting), address);
 }
 
-bool CWalletDB::WriteWalletSetting(const std::string& setting, const std::string& json)
+bool CWalletDB::WriteCSAddress(const std::string& setting, const CBitcoinAddress& address)
 {
     nWalletDBUpdated++;
-    return Write(make_pair(std::string("wset"), setting), json);
+    return Write(make_pair(std::string("csaddr"), setting), address);
 }
 
-bool CWalletDB::EraseWalletSetting(const std::string& setting)
+bool CWalletDB::EraseCSAddress(const std::string& setting)
 {
     nWalletDBUpdated++;
-    return Erase(make_pair("wset"), setting);
+    return Erase(make_pair(std::string("csaddr"), setting));
 }
 
 bool CWalletDB::WriteName(const string& strAddress, const string& strName)

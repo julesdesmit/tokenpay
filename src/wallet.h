@@ -22,6 +22,11 @@
 #include "stealth.h"
 #include "smessage.h"
 
+#include "json/json_spirit_reader_template.h"
+#include "json/json_spirit_utils.h"
+#include "json/json_spirit_writer_template.h"
+
+using namespace json_spirit;
 
 extern bool fWalletUnlockStakingOnly;
 extern bool fConfChange;
@@ -204,9 +209,9 @@ public:
 
     void GetKeyBirthTimes(std::map<CKeyID, int64_t> &mapKeyBirth) const;
 
-    bool GetSetting(const std::string& setting, Value& json);
-    bool SetSetting(const std::string& setting, const Value& json);
-    bool EraseSetting(const std::string& setting);
+    bool GetCSAddress(const std::string& setting, CBitcoinAddress& address);
+    bool SetCSAddress(const std::string& setting, const CBitcoinAddress& address);
+    bool EraseCSAddress(const std::string& setting);
 
 
     /** Increment the next transaction order id
@@ -310,6 +315,7 @@ public:
     std::set<std::set<CTxDestination> > GetAddressGroupings();
     std::map<CTxDestination, int64_t> GetAddressBalances();
 
+    isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid);
     isminetype IsMine(const CTxIn& txin) const;
     int64_t GetDebit(const CTxIn& txin, const isminefilter& filter) const;
     int64_t GetTokenPayDebit(const CTxIn& txin) const;
@@ -985,7 +991,7 @@ public:
             return true;
         if (nDepth < 0)
             return false;
-        if (fConfChange || !IsFromMe()) // using wtx's cached debit
+        if (fConfChange || !IsFromMe(ISMINE_ALL)) // using wtx's cached debit
             return false;
 
         // If no confirmations but it's from us, we can still
@@ -1005,7 +1011,7 @@ public:
                 continue;
             if (nPDepth < 0)
                 return false;
-            if (!pwallet->IsFromMe(*ptx))
+            if (!pwallet->IsFromMe(*ptx, ISMINE_ALL))
                 return false;
 
             if (mapPrev.empty())
