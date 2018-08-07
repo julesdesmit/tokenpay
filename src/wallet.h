@@ -82,7 +82,6 @@ public:
 };
 
 bool IsDestMine(const CWallet &wallet, const CTxDestination &dest);
-isminetype IsMine(const CWallet& wallet, const CScript& scriptPubKey);
 
 /** A CWallet is an extension of a keystore, which also maintains a set of transactions and balances,
  * and provides the ability to create new transactions.
@@ -209,8 +208,8 @@ public:
 
     void GetKeyBirthTimes(std::map<CKeyID, int64_t> &mapKeyBirth) const;
 
-    bool GetCSAddress(const std::string& setting, CBitcoinAddress& address);
-    bool SetCSAddress(const std::string& setting, const CBitcoinAddress& address);
+    bool GetCSAddress(const std::string& setting, std::string& address);
+    bool SetCSAddress(const std::string& setting, const std::string& address);
     bool EraseCSAddress(const std::string& setting);
 
 
@@ -315,7 +314,8 @@ public:
     std::set<std::set<CTxDestination> > GetAddressGroupings();
     std::map<CTxDestination, int64_t> GetAddressBalances();
 
-    isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid);
+    isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid) const;
+    isminetype IsMine(const CWallet& wallet, const CScript& scriptPubKey) const;
     isminetype IsMine(const CTxIn& txin) const;
     int64_t GetDebit(const CTxIn& txin, const isminefilter& filter) const;
     int64_t GetTokenPayDebit(const CTxIn& txin) const;
@@ -528,6 +528,8 @@ public:
     
     
     bool HaveKey(const CKeyID &address) const;
+
+    static unsigned int HaveKeys(const std::vector<valtype>& pubkeys, const CWallet& wallet);
     
     bool HaveExtKey(const CKeyID &address) const;
     

@@ -245,6 +245,6 @@ extern json_spirit::Value thinforcestate(const json_spirit::Array& params, bool 
 extern json_spirit::Value extkey(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value mnemonic(const json_spirit::Array& params, bool fHelp);
 
-extern json_spirit::Value walletsettings(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value coldstakingaddress(const json_spirit::Array& params, bool fHelp);
 
 #endif

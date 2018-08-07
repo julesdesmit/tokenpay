@@ -14,17 +14,16 @@
 #include "kernel.h"
 #include "coincontrol.h"
 #include "pbkdf2.h"
+#include "keystore.h"
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
-#include "keystore.h"
 
 #include "json/json_spirit_reader_template.h"
 #include "json/json_spirit_utils.h"
 #include "json/json_spirit_writer_template.h"
 
 using namespace json_spirit;
-
 using namespace std;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1685,7 +1684,7 @@ void CWallet::AvailableCoinsForStaking(std::vector<COutput>& vCoins, unsigned in
                 txnouttype typeRet;
 
                 const CTxOut txout = pcoin->vout[i];
-                const CScript *pscriptPubKey = *txout.scriptPubKey;
+                const CScript *pscriptPubKey = &txout.scriptPubKey;
                 CScript coinstakePath;
 
                 if (HasIsCoinstakeOp(*pscriptPubKey))
@@ -5827,7 +5826,7 @@ uint64_t CWallet::GetStakeWeight() const
     return nWeight;
 }
 
-bool CWallet::GetCSAddress(const std::string& setting, CBitcoinAddress& address)
+bool CWallet::GetCSAddress(const std::string& setting, std::string& address)
 {
     LOCK(cs_wallet);
 
@@ -5839,7 +5838,7 @@ bool CWallet::GetCSAddress(const std::string& setting, CBitcoinAddress& address)
     return true;
 }
 
-bool CWallet::SetCSAddress(const std::string& setting, const CBitcoinAddress& address)
+bool CWallet::SetCSAddress(const std::string& setting, const std::string& address)
 {
     LOCK(cs_wallet);
 
@@ -6003,11 +6002,13 @@ bool CWallet::CreateCoinStake(unsigned int nBits, int64_t nSearchInterval, int64
                     scriptPubKeyKernel << OP_DUP << OP_HASH160 << ToByteVector(spendId) << OP_EQUALVERIFY << OP_CHECKSIG;
 
                     // If a coldstaking address is loaded, then send the output to a coldstaking script
-                    CBitcoinAddress addrColdStaking;
-                    if (GetCSAddress("changeaddress", addrColdStaking))
+                    std::string sAddress;
+                    if (GetCSAddress("changeaddress", sAddress))
                     {
                         if (fDebugPoS)
-                            LogPrintf("Sending output to coldstakingscript %s.", addrColdStaking);
+                            LogPrintf("Sending output to coldstakingscript %s.", sAddress);
+
+                        CBitcoinAddress addrColdStaking(sAddress);
 
                         CTxDestination destColdStaking = addrColdStaking.Get();
                         CScript scriptStaking;
@@ -9105,7 +9106,7 @@ static unsigned int HaveKeys(const vector<valtype>& pubkeys, const CWallet& wall
     return nResult;
 }
 
-isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
+isminetype CWallet::IsMine(const CWallet &wallet, const CScript& scriptPubKey) const
 {
     if (HasIsCoinstakeOp(scriptPubKey))
     {
@@ -9113,12 +9114,13 @@ isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
         if (!SplitConditionalCoinstakeScript(scriptPubKey, scriptA, scriptB))
             return ISMINE_NO;
 
-        CKeyID &keyID;
-        isminetype typeB = IsMine(scriptB, keyID, &false);
+        CKeyID keyID;
+        bool isInvalid = false;
+        isminetype typeB = wallet.IsMine(scriptB, keyID, isInvalid);
         if (typeB & ISMINE_SPENDABLE)
             return typeB;
 
-        isminetype typeA = IsMine(scriptA, keyID, &false);
+        isminetype typeA = wallet.IsMine(scriptA, keyID, isInvalid);
 
         if (typeA & ISMINE_SPENDABLE) {
             int ia = (int) typeA;
@@ -9134,12 +9136,12 @@ isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
     txnouttype whichType;
     if (!Solver(scriptPubKey, whichType, vSolutions))
     {
-        if (HaveWatchOnly(scriptPubKey))
+        if (CCryptoKeyStore::HaveWatchOnly(scriptPubKey))
             return ISMINE_WATCH_UNSOLVABLE;
         return ISMINE_NO;
     }
 
-    CKeyID &keyID;
+    CKeyID keyID;
     switch (whichType)
     {
         case TX_NONSTANDARD:
@@ -9147,12 +9149,12 @@ isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
             break;
         case TX_PUBKEY:
             keyID = CPubKey(vSolutions[0]).GetID();
-            if (HaveKey(keyID))
+            if (wallet.HaveKey(keyID))
                 return ISMINE_SPENDABLE;
             break;
         case TX_PUBKEYHASH:
             keyID = CKeyID(uint160(vSolutions[0]));
-            if (HaveKey(keyID))
+            if (wallet.HaveKey(keyID))
                 return ISMINE_SPENDABLE;
             break;
         case TX_SCRIPTHASH:
@@ -9160,7 +9162,7 @@ isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
             CScript subscript;
             if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
                 break;
-            return IsMine(*this, subscript);
+            return IsMine(wallet, subscript);
         }
         case TX_MULTISIG:
         {
@@ -9177,7 +9179,7 @@ isminetype IsMine(const CWallet &wallet, const CScript& scriptPubKey)
     return ISMINE_NO;
 }
 
-isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid)
+isminetype CWallet::IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid) const
 {
     if (HasIsCoinstakeOp(scriptPubKey))
     {
@@ -9205,12 +9207,11 @@ isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid)
     txnouttype whichType;
     if (!Solver(scriptPubKey, whichType, vSolutions))
     {
-        if (::HaveWatchOnly(scriptPubKey))
+        if (CCryptoKeyStore::HaveWatchOnly(scriptPubKey))
             return ISMINE_WATCH_UNSOLVABLE;
         return ISMINE_NO;
     }
 
-    CKeyID &keyID;
     switch (whichType)
     {
         case TX_NONSTANDARD:
@@ -9218,28 +9219,28 @@ isminetype IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isInvalid)
             break;
         case TX_PUBKEY:
             keyID = CPubKey(vSolutions[0]).GetID();
-            if (HaveKey(keyID))
+            if (this->HaveKey(keyID))
                 return ISMINE_SPENDABLE;
             break;
         case TX_PUBKEYHASH:
             keyID = CKeyID(uint160(vSolutions[0]));
-            if (HaveKey(keyID))
+            if (this->HaveKey(keyID))
                 return ISMINE_SPENDABLE;
             break;
         case TX_SCRIPTHASH:
         {
             CScript subscript;
-            if (!wallet.GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
-                return false;
-            isminetype ret = IsMine(this, subscript);
-            if (ret == ISMINE_SPENDABLE || ret = ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
+            if (!CWallet::GetCScript(CScriptID(uint160(vSolutions[0])), subscript))
+                break;
+            isminetype ret = IsMine(*this, subscript);
+            if (ret == ISMINE_SPENDABLE || ret == ISMINE_WATCH_SOLVABLE || (ret == ISMINE_NO && isInvalid))
                 return ret;
             break;
         }
         case TX_MULTISIG:
         {
             std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
-            if (HaveKeys(keys, this) == keys.size())
+            if (HaveKeys(keys, *this) == keys.size())
                 return ISMINE_SPENDABLE;
             break;
         }

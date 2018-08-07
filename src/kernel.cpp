@@ -770,24 +770,21 @@ bool CheckProofOfStake(CBlockIndex* pindexPrev, const CTransaction& tx, unsigned
     const CTxOut& txoutCheck = tx.vout[0];
     if (HasIsCoinstakeOp(txoutCheck.scriptPubKey))
     {
-        uint64_t amount;
-        for (const auto &intx : tx.vin)
-        {
-            amount += intx->nValue;
-        }
+        uint64_t amount = 0;
         uint64_t nVerify = 0;
 
         for (const auto &txout : tx.vout)
         {
+            amount += txout.nValue;
             if (tx.nVersion == ANON_TXN_VERSION)
             {
                 return tx.DoS(100, error("CheckProofOfStake() : Can't do a coldstaking transaction with anon outputs."));
             }
 
-            const CScript *pOutPubKey = txout->&scriptPubKey;
+            const CScript *pOutPubKey = &txout.scriptPubKey;
 
-            if (pOutPubKey && *pOutPubKey == txoutCheck.scriptPubKey)
-                nVerify += txout->nValue;
+            if (pOutPubKey && (*pOutPubKey == txoutCheck.scriptPubKey))
+                nVerify += txout.nValue;
         }
 
         if (nVerify < amount)

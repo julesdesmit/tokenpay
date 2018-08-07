@@ -3226,7 +3226,7 @@ Value coldstakingaddress(const Array &request, bool fHelp)
     if (fHelp || request.size() < 1)
         throw std::runtime_error(
                 "coldstakingaddress [extpubkey]"
-                "\nChange address to send cold staking outputs to. To clear, simply write coldstakingaddress clear.\n"
+                "\nChange address to send cold staking outputs to. To clear, simply write \"coldstakingaddress clear\".\n"
         );
 
     Object result;
@@ -3235,7 +3235,7 @@ Value coldstakingaddress(const Array &request, bool fHelp)
 
     if (sSetting == "clear")
     {
-        CBitcoinAddress addr;
+        std::string addr;
         if (pwalletMain->GetCSAddress("coldstakingaddress", addr))
         {
             pwalletMain->EraseCSAddress("coldstakingaddress");
@@ -3252,7 +3252,7 @@ Value coldstakingaddress(const Array &request, bool fHelp)
         CKeyID addrKey;
         addr.GetKeyID(addrKey);
         if (pwalletMain->HaveKey(addrKey))
-            throw JSONRPCError(RPC_INVALID_PARAMETER, sAddress + _(" is spendable from this wallet."));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, sSetting + _(" is spendable from this wallet."));
 
         // This will need to be refactored appropriately for the codebase if this requires a hardfork.
         //
@@ -3260,11 +3260,8 @@ Value coldstakingaddress(const Array &request, bool fHelp)
         // if (GetAdjustedTime() < consensusParams.OpIsCoinstakeTime)
         //     throw JSONRPCError(RPC_INVALID_PARAMETER, _("OpIsCoinstake is not active yet."));
 
-        if (!pwalletMain->SetCSAddress("coldstakingaddress", addr))
+        if (!pwalletMain->SetCSAddress("coldstakingaddress", sSetting))
             throw JSONRPCError(RPC_WALLET_ERROR, _("SetCSAddress failed."));
-
-        if (warnings.size() > 0)
-            result.push_back(Pair("warnings", warnings));
 
         result.push_back(Pair("coldstakingaddress", sSetting));
     }

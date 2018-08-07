@@ -237,9 +237,9 @@ public:
         return (ret == 0);
     }
 
-    bool ReadCSAddress(const std::string& setting, CBitcoinAddress& address);
+    bool ReadCSAddress(const std::string& setting, std::string& address);
 
-    bool WriteCSAddress(const std::string& setting, const CBitcoinAddress& address);
+    bool WriteCSAddress(const std::string& setting, const std::string& address);
 
     bool EraseCSAddress(const std::string& setting);
 

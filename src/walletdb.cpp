@@ -20,12 +20,12 @@ extern bool fWalletUnlockStakingOnly;
 
 
 
-bool CWalletDB::ReadCSAddress(const std::string& setting, CBitcoinAddress& address)
+bool CWalletDB::ReadCSAddress(const std::string& setting, std::string& address)
 {
     return Read(make_pair(std::string("csaddr"), setting), address);
 }
 
-bool CWalletDB::WriteCSAddress(const std::string& setting, const CBitcoinAddress& address)
+bool CWalletDB::WriteCSAddress(const std::string& setting, const std::string& address)
 {
     nWalletDBUpdated++;
     return Write(make_pair(std::string("csaddr"), setting), address);
