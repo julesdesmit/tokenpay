@@ -528,8 +528,6 @@ public:
     
     
     bool HaveKey(const CKeyID &address) const;
-
-    static unsigned int HaveKeys(const std::vector<valtype>& pubkeys, const CWallet& wallet);
     
     bool HaveExtKey(const CKeyID &address) const;
     

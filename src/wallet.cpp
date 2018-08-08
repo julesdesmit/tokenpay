@@ -9094,7 +9094,7 @@ bool IsDestMine(const CWallet &wallet, const CTxDestination &dest)
     return boost::apply_visitor(CWalletIsMineVisitor(&wallet), dest);
 };
 
-static unsigned int HaveKeys(const vector<valtype>& pubkeys, const CWallet& wallet)
+static unsigned int HaveKeys(const std::vector<valtype>& pubkeys, const CWallet& wallet)
 {
     unsigned int nResult = 0;
     BOOST_FOREACH(const valtype& pubkey, pubkeys)
@@ -9167,7 +9167,8 @@ isminetype CWallet::IsMine(const CWallet &wallet, const CScript& scriptPubKey) c
         case TX_MULTISIG:
         {
             std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
-            if (HaveKeys(keys, wallet) == keys.size())
+            const auto haveKeys = HaveKeys(keys, wallet);
+            if (haveKeys == keys.size())
                 return ISMINE_SPENDABLE;
             break;
         }
@@ -9240,7 +9241,8 @@ isminetype CWallet::IsMine(const CScript &scriptPubKey, CKeyID &keyID, bool &isI
         case TX_MULTISIG:
         {
             std::vector<valtype> keys(vSolutions.begin()+1, vSolutions.begin()+vSolutions.size()-1);
-            if (HaveKeys(keys, *this) == keys.size())
+            const auto haveKeys = HaveKeys(keys, *this);
+            if (haveKeys == keys.size())
                 return ISMINE_SPENDABLE;
             break;
         }
